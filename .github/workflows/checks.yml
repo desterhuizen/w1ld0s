@@ -1,0 +1,48 @@
+---
+# Static checks. Seconds, on every push and PR. See tests/check.sh.
+name: Checks
+
+on:  # yamllint disable-line rule:truthy
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        # Pinned to a commit SHA (v7.0.1) rather than a tag: a tag can be
+        # moved to point at different code, a SHA cannot.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          # Nothing here pushes back to the repo, so leaving the token in
+          # .git/config would only widen what a compromised step could reach.
+          persist-credentials: false
+
+      # Run it exactly the way an operator does, which also proves the exec bit.
+      # bash 5, git, python3, zsh and shellcheck are all preinstalled on the
+      # runner, so this needs no setup step and no image pull.
+      - name: Static checks
+        run: ./tests/check.sh -v
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          # Full history: tests/check.sh scans the working tree, but a key
+          # committed and then deleted is still reachable in the history.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Scan history for secrets
+        # Pinned to a commit SHA (v3.0.0).
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

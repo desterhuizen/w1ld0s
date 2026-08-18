@@ -1,0 +1,59 @@
+---
+# Mirrors the w1ld0s-tools workflow. Lints changed files on push and PR.
+name: Lint Code Base
+
+on:  # yamllint disable-line rule:truthy
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+  packages: read
+  statuses: write
+
+jobs:
+  run-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        # Pinned to a commit SHA (v7.0.1) rather than a tag: a tag can be moved
+        # to point at different code, a SHA cannot.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          # Full git history is needed to get a proper list of changed files
+          # within `super-linter`
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Lint Code Base
+        # Pinned to a commit SHA (v8.7.0), same reasoning as above.
+        uses: super-linter/super-linter@4ce20838b8ab83717e78138c5b3a1407148e0918
+        env:
+          VALIDATE_ALL_CODEBASE: false
+          DEFAULT_BRANCH: "main"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Binary assets, and assets/zshrc — which is zsh, not bash.
+          # shellcheck has no zsh dialect and reads `zstyle` and ${(s.:.)x}
+          # as syntax errors. tests/check.sh runs `zsh -n` on it instead,
+          # which is the correct parser for that file.
+          FILTER_REGEX_EXCLUDE: "assets/(fonts|branding)/.*|assets/zshrc"
+
+          # --- Linters deliberately turned off -------------------------------
+          # Modules are SOURCED, not executed, so the executable bit carries no
+          # meaning here. tests/check.sh checks the bits agree with each other,
+          # which is the property that actually matters.
+          VALIDATE_BASH_EXEC: false
+          # shfmt is a formatter, not a correctness check — it wants every
+          # script reindented to tabs. shellcheck already covers correctness,
+          # and honours .shellcheckrc so it agrees with tests/check.sh.
+          VALIDATE_SHELL_SHFMT: false
+          # Same category: prettier reformats YAML. yamllint still runs and
+          # checks these workflow files for actual problems.
+          VALIDATE_YAML_PRETTIER: false
+          # Both READMEs open with a <p align="center"> banner and run long
+          # prose lines, so MD013/MD033/MD041 would be a wall of noise. The
+          # docs invariant that actually matters — the module table tracking
+          # ALL_MODULES — is enforced by tests/check.sh, not by a linter.
+          VALIDATE_MARKDOWN: false

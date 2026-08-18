@@ -1,0 +1,9 @@
+---
+# Actions are pinned by commit SHA, which is what makes them tamper-proof and
+# also what makes them rot silently. This is the other half of that policy.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

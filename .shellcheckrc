@@ -1,0 +1,16 @@
+# shellcheck configuration for w1ld0s.
+#
+# Follow `source "$W1LD0S_ROOT/lib/common.sh"` so the framework's helpers
+# resolve, instead of every module drowning in SC2154 for log/ok/warn/apt_install.
+external-sources=true
+
+# `cmd && ok "..." || warn "..."` is this codebase's house style for
+# report-and-continue. SC2015's caveat is that C runs when A succeeds but B
+# fails — here B is always a logging call that cannot meaningfully fail, so
+# the warning is noise on roughly fifteen sites.
+disable=SC2015
+
+# Modules are SOURCED, not executed, and bail with the documented idiom
+# `return 0 2>/dev/null || exit 0` (see CLAUDE.md). shellcheck reads the
+# `exit 0` as unreachable because it cannot know the file is sourced.
+disable=SC2317
