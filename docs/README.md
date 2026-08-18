@@ -39,7 +39,7 @@ assets/               dotfiles imported verbatim: zshrc, tmux.conf, i3/, fonts/,
                       terminator/, ptyxis/ (the GNOME terminal's palette keyfile)
 assets/branding/      w1ld0s.png (logo + wallpaper), w1ld0s-grub.png (1920x1080
                       GRUB background), w1ld0s-splash.png (Plymouth watermark)
-docs/                 this file + the AD collection cheatsheet
+docs/                 this file, the AD collection cheatsheet, the Debian port note
 tests/                check.sh (static, per push), verify-box.sh (on a real box),
                       box-state.sh (idempotence digest), Dockerfile + check-docker.sh
 ```
