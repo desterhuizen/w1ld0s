@@ -7,3 +7,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Do not propose a release the day it is published. That window is exactly
+    # when a compromised or hijacked tag is still unnoticed, and taking the
+    # bump a week late costs nothing here.
+    cooldown:
+      default-days: 7

@@ -94,6 +94,9 @@ jobs:
           sudo -u w1ld0s -H bash -c \
             'cd "$1" && ./bootstrap.sh $2' _ "$GITHUB_WORKSPACE" "$MODULES" \
             </dev/null 2>&1 | tee run1.log
+          # The redirect deliberately runs as the workflow user; only
+          # box-state.sh itself needs to be w1ld0s, so it reads that $HOME.
+          # shellcheck disable=SC2024
           sudo -u w1ld0s -H "$GITHUB_WORKSPACE/tests/box-state.sh" > state1.txt
 
       - name: Run 2
@@ -101,6 +104,7 @@ jobs:
           sudo -u w1ld0s -H bash -c \
             'cd "$1" && ./bootstrap.sh $2' _ "$GITHUB_WORKSPACE" "$MODULES" \
             </dev/null 2>&1 | tee run2.log
+          # shellcheck disable=SC2024
           sudo -u w1ld0s -H "$GITHUB_WORKSPACE/tests/box-state.sh" > state2.txt
 
       - name: Assert idempotence

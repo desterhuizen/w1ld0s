@@ -5,6 +5,11 @@
 # GNU userland deliberately; this is how it gets run from a macOS checkout.
 FROM ubuntu:26.04
 
+# Versions are deliberately unpinned. This is the checker's own environment,
+# not something the provisioner ships, and pinning it would mean editing this
+# file every time Ubuntu moves a package — the opposite of the lockfile
+# discipline that applies to tools.d/, which is about reproducing a workstation.
+# hadolint ignore=DL3008
 RUN apt-get update -qq && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         bash git shellcheck zsh python3 ca-certificates && \
