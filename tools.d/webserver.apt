@@ -1,0 +1,20 @@
+# webserver.apt — the static file host for engagement payloads (modules/35).
+#
+# nginx over apache2 for one reason: the Server header. Apache's ServerTokens
+# Prod still answers "Server: Apache", and mod_headers cannot unset it (only
+# mod_security's SecServerSignature can). nginx's server_tokens off drops the
+# version but keeps "Server: nginx", and the headers-more filter below removes
+# the header outright.
+#
+# 'nginx' is the binary package; nginx-light/full/extras are metapackages that
+# only pull module sets we do not want. nginx Provides: httpd, so this also
+# satisfies anything asking for a generic web server.
+nginx
+
+# ngx_http_headers_more — more_clear_headers, the only supported way to delete
+# Server/Date/Last-Modified rather than merely shorten them.
+# It depends on a versioned nginx-abi-<x.y.z>, so an nginx ABI bump can leave
+# this uninstallable for a few days. modules/35 checks for the module and drops
+# the more_* lines from the config when it is missing — without that check the
+# directives are simply unknown and nginx refuses to start at all.
+libnginx-mod-http-headers-more-filter

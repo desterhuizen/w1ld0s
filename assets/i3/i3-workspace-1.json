@@ -1,0 +1,165 @@
+{
+	"layout": "splitv",
+	"percent": 0.2,
+	"type": "con",
+	"notes": [
+		{
+		    "border": "pixel",
+		    "floating": "auto_off",
+		    "layout": "splith",
+		    "marks": [],
+		    "percent": 0.2,
+		    "type": "con",
+		    "nodes": [
+			{
+			    "border": "pixel",
+			    "current_border_width": 2,
+			    "floating": "auto_off",
+			    "geometry": {
+			       "height": 453,
+			       "width": 642,
+			       "x": 0,
+			       "y": 0
+			    },
+			    "marks": [],
+			    "name": "T1",
+			    "percent": 0.333333333333333,
+			    "swallows": [
+			       {
+					"class": "Terminator",
+					"instance": "terminator",
+					"title": "T1"
+			       }
+			    ],
+			    "type": "con"
+			},
+			{
+			    "border": "pixel",
+			    "current_border_width": 2,
+			    "floating": "auto_off",
+			    "geometry": {
+			       "height": 453,
+			       "width": 642,
+			       "x": 0,
+			       "y": 0
+			    },
+			    "marks": [],
+			    "name": "T2",
+			    "percent": 0.333333333333333,
+			    "swallows": [
+			       {
+					"class": "Terminator",
+					"instance": "^terminator",
+					"title": "T2"
+			       }
+			    ],
+			    "type": "con"
+			},
+			{
+			    "border": "pixel",
+			    "current_border_width": 2,
+			    "floating": "auto_off",
+			    "geometry": {
+			       "height": 453,
+			       "width": 642,
+			       "x": 0,
+			       "y": 0
+			    },
+			    "marks": [],
+			    "name": "T3",
+			    "percent": 0.333333333333333,
+			    "swallows": [
+			       {
+					"class": "Terminator",
+					"instance": "terminator",
+					"title": "T3"
+
+			       }
+			    ],
+			    "type": "con"
+			}
+		    ]
+		},
+		{
+		    
+		    "border": "pixel",
+		    "floating": "auto_off",
+		    "layout": "splith",
+		    "marks": [],
+		    "percent": 0.8,
+		    "type": "con",
+		    "nodes": [
+			{
+			    "border": "pixel",
+			    "current_border_width": 2,
+			    "floating": "auto_off",
+			    "geometry": {
+			       "height": 453,
+			       "width": 642,
+			       "x": 0,
+			       "y": 0
+			    },
+			    "marks": [],
+			    "name": "M1",
+			    "percent": 0.333333333333333,
+			    "swallows": [
+			       {
+					"class": "Terminator",
+					"instance": "terminator",
+					"title": "M1"
+
+			       }
+			    ],
+			    "type": "con"
+			},
+			{
+			    "border": "pixel",
+			    "current_border_width": 2,
+			    "floating": "auto_off",
+			    "geometry": {
+			       "height": 453,
+			       "width": 642,
+			       "x": 0,
+			       "y": 0
+			    },
+			    "marks": [],
+			    "name": "M2",
+			    "percent": 0.333333333333333,
+			    "swallows": [
+			       {
+					"class": "Terminator",
+					"instance": "terminator",
+					"title": "M2"
+
+			       }
+			    ],
+			    "type": "con"
+			},
+			{
+			    "border": "pixel",
+			    "current_border_width": 2,
+			    "floating": "auto_off",
+			    "geometry": {
+			       "height": 453,
+			       "width": 642,
+			       "x": 0,
+			       "y": 0
+			    },
+			    "marks": [],
+			    "name": "M3",
+			    "percent": 0.333333333333333,
+			    "swallows": [
+			       {
+					"class": "Terminator",
+					"instance": "terminator",
+					"title": "M3"
+
+			       }
+			    ],
+			    "type": "con"
+			}
+		    ]
+		}
+	]
+}
+

@@ -1,0 +1,19 @@
+# gnome.folder — desktop-file IDs grouped into the "w1ld0s" app-grid folder.
+# Consumed by modules/07-gnome-shell.sh
+# (org.gnome.desktop.app-folders.folder:/…/folders/w1ld0s/ apps).
+#
+# One ID per line, WITH the .desktop suffix. Missing entries are filtered at
+# apply time, so it is safe to list a tool that only some builds install.
+#
+# GUI pentest tools only. Anything CLI-first (nxc, ffuf, the pipx venvs) has no
+# .desktop file at all and belongs in a terminal, not the app grid.
+
+# Burp and Ghidra ship no usable entry of their own — module 07 generates a
+# stable one for each (install4j randomises its id; Ghidra only gets a PATH shim
+# from module 50, so it never reached the app grid at all).
+w1ld0s-burpsuite.desktop
+w1ld0s-ghidra.desktop
+dk.gqrx.gqrx.desktop          # SDR, from module 70
+org.remmina.Remmina.desktop   # RDP/VNC to targets
+# Not listed: wireshark and zaproxy. Nothing in tools.d installs them, so an
+# entry here would be permanently filtered out — add the package first.

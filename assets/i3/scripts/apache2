@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# Check if port 80 (HTTP) or 443 (HTTPS) is listening
+if ss -ltn | grep -qE ':(80|443)\s'; then
+    echo "🌐"
+    echo "🌐"
+    echo "#00FF00"
+fi

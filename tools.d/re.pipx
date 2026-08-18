@@ -1,0 +1,13 @@
+# re.pipx — Reverse-engineering / binary / misc Python tools. Isolated pipx venvs.
+# Consumed by modules/50-re-binary.sh.
+
+pwntools      pwntools==4.15.0
+# ropper removed: its 'filebytes' dep uses ast.Str, deleted in Python 3.12, and
+# upstream is unmaintained — so no supported interpreter can build it. ROPgadget
+# below covers the same gadget-search ground.
+ROPgadget     ROPgadget==7.7
+frida-tools   frida-tools==14.10.4
+objection     objection==1.12.5
+volatility3   volatility3==2.28.0
+flask-unsign  flask-unsign==1.2.1
+maigret       maigret==0.6.4

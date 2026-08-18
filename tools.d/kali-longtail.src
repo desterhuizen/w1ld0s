@@ -1,0 +1,16 @@
+# kali-longtail.src — tools with no clean Ubuntu-native package, built from source.
+# This file is documentation/reference; the recipes live in the modules that own
+# each tool (sublist3r->30-web pipx, hcxtools->70-wireless build, veil/beef->60).
+# Kept here so the decision ("from source, no Kali apt repo") is discoverable.
+#
+# tool        owner-module        method
+# ----------  ------------------  ------------------------------------------------
+# sublist3r   30-web              pipx install sublist3r
+# crowbar     20-ad-network       pipx install git+https://github.com/galkan/crowbar
+# kerberoast  20-ad-network       git clone nidem/kerberoast (scripts, no build)
+# hcxtools    70-wireless         git clone + make (needs libssl/libcurl/pkg-config)
+# veil        DROPPED             needs wine32 + mono, so x86_64 only, and it is
+#                                 unmaintained since 2021. If you want it on an
+#                                 x86_64 box: clone Veil-Framework/Veil and run
+#                                 config/setup.sh --force --silent by hand.
+# beef-xss    60-payload-dev      git clone beefproject/beef + ./install (ruby/bundler)

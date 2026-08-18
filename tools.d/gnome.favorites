@@ -1,0 +1,13 @@
+# gnome.favorites — what gets pinned to the GNOME dock, in order.
+# Consumed by modules/07-gnome-shell.sh (org.gnome.shell favorite-apps).
+#
+# One desktop-file ID per line, WITH the .desktop suffix. Entries with no
+# matching file in /usr/share/applications or ~/.local/share/applications are
+# dropped at apply time — a typo or an uninstalled tool must not blank the dock.
+#
+# Deliberately minimal. Everything else is one Super-key search (or rofi) away,
+# and a dock that fits on one screen is the whole point of this list.
+
+terminator.desktop            # the terminal the i3/terminator config is built around
+brave-browser.desktop         # not com.brave.Browser — that duplicate is hidden in gnome.hide
+org.gnome.Nautilus.desktop    # Files

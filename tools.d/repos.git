@@ -1,0 +1,40 @@
+# repos.git — third-party repos cloned into ~/tools/repos (alias-compatible).
+# The third-party repos the toolkit's aliases and cheatsheets expect.
+# Consumed by modules/80-repos-binaries.sh. The toolkit itself is tools.d/tools.git.
+# https throughout: these must clone on a box with no SSH key and no GitHub account.
+
+# --- tunneling / c2 / shells ---
+https://github.com/NHAS/reverse_ssh.git
+https://github.com/jpillora/chisel.git
+https://github.com/iagox86/dnscat2.git
+https://github.com/Mr-Un1k0d3r/SCShell.git
+
+# --- windows / AD offense ---
+https://github.com/samratashok/nishang.git
+https://github.com/PowerShellMafia/PowerSploit.git
+https://github.com/NetSPI/PowerUpSQL.git
+https://github.com/GhostPack/Certify.git
+https://github.com/NetSPI/ESC.git
+https://github.com/dirkjanm/krbrelayx.git
+https://github.com/KINGSABRI/MSI-AlwaysInstallElevated.git
+https://github.com/Flangvik/SharpCollection.git
+https://github.com/ScriptIdiot/SuperSharpShooter.git
+https://github.com/tyranid/DotNetToJScript.git
+https://github.com/outflanknl/EvilClippy.git
+
+# --- privesc / enum ---
+https://github.com/peass-ng/PEASS-ng.git
+
+# --- recon / infra ---
+https://github.com/rvrsh3ll/FindFrontableDomains.git
+https://github.com/OWASP/joomscan.git
+
+# --- reference / offline cheatsheets (aliases: htricks/gtfo/platt) ---
+https://github.com/swisskyrepo/PayloadsAllTheThings.git
+https://github.com/swisskyrepo/InternalAllTheThings.git
+https://github.com/swisskyrepo/HardwareAllTheThings.git
+https://github.com/GTFOBins/GTFOBins.github.io.git
+https://github.com/luigigubello/PayloadsAllThePDFs.git
+https://github.com/Python-Markdown/markdown.git
+# Offline HackTricks, referenced by the htricks alias:
+https://github.com/HackTricks-wiki/hacktricks.git

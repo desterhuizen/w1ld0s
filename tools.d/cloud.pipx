@@ -1,0 +1,8 @@
+# cloud.pipx — Cloud pentest Python tools. One isolated pipx venv each.
+# Consumed by modules/40-cloud.sh. (aws/az/gcloud/kubectl handled separately.)
+
+pacu        pacu==1.7.0
+scoutsuite  scoutsuite==5.14.0
+prowler     prowler==3.11.3
+roadrecon   roadrecon==2.0.0
+roadtx      roadtx==1.22.1

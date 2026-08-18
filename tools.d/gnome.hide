@@ -1,0 +1,32 @@
+# gnome.hide — desktop-file IDs to hide from the GNOME app grid.
+# Consumed by modules/07-gnome-shell.sh, which copies each system .desktop into
+# ~/.local/share/applications and sets NoDisplay=true on the copy. A user-level
+# file of the same name shadows the system one, so nothing is deleted and
+# `apt-get install --reinstall` cannot undo it.
+#
+# One ID per line, WITHOUT the .desktop suffix. IDs with no system file are
+# skipped silently — this list is shared across boxes that install different sets.
+#
+# Hiding is NOT uninstalling. Every entry below stays fully runnable from a
+# terminal; it just stops occupying a tile in a grid you scroll with your eyes.
+
+# --- daemons and libraries that ship a launcher for no reason ---
+picom                 # compositor; started by the i3 config, never by hand
+feh                   # image viewer used as the i3 wallpaper setter
+lstopo                # hwloc topology viewer
+
+# --- duplicates: two entries, one application ---
+com.brave.Browser     # duplicate of brave-browser.desktop (the one we pin)
+code-url-handler      # protocol handler for code.desktop, not a second VS Code
+
+# --- interpreters and runtimes that are not "apps" ---
+python3.14
+openjdk-21-java
+openjdk-25-java
+
+# --- X11 leftovers that are meaningless in a Wayland GNOME session ---
+debian-xterm
+debian-uxterm
+i3                    # the i3 SESSION is picked at the greeter, not launched here
+rofi-theme-selector   # rofi itself is bound to a key in the i3 config
+arandr                # GNOME has Settings > Displays

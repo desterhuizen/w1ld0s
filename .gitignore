@@ -1,0 +1,67 @@
+# w1ld0s/.gitignore — secrets NEVER enter this repo (core principle #7).
+# Module 99 migrates all of the below over a secure channel instead.
+
+# --- credentials / API keys -------------------------------------------------
+provider-config.yaml        # ~/.config/uncover — 18 OSINT API keys
+hosts.yml                   # ~/.config/gh — GitHub oauth token
+nxc.conf                    # ~/.nxc — BloodHound CE host + creds
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ecdsa*
+id_ed25519*
+*.ccache                    # Kerberos ticket caches
+*.kirbi
+krb5.conf
+.env
+.envrc
+secrets/
+creds/
+
+# --- VPN profiles -----------------------------------------------------------
+*.ovpn
+*.ovpn.d/
+*.wgconf
+wg*.conf
+
+# --- engagement data (never belongs in the provisioner repo) ---------------
+loot/
+scans/
+*.ccache
+*.ntds
+*.dit
+*.hive
+*.bloodhound.zip
+*_bloodhound.zip
+*.json.bh
+
+# --- build / runtime noise --------------------------------------------------
+*.log
+*.tmp
+*.swp
+*.bak
+*.w1ld0s.bak
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- local agent notes (deliberately untracked) -----------------------------
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+
+# --- explicitly DO track the manifests and assets --------------------------
+!tools.d/*
+!assets/**
+
+# --- private overlay manifest (module 95) -----------------------------------
+# Clone URLs for repos that can't be public. Absent by default; module 95 is a
+# no-op without it. Must come after the !tools.d/* force-track above: the last
+# matching rule wins, so re-ignoring it here is what keeps it out of the repo.
+tools.d/private.git

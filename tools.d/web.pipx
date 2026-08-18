@@ -1,0 +1,10 @@
+# web.pipx — Web-app Python tools. One isolated pipx venv each.
+# Consumed by modules/30-web.sh.
+
+mitmproxy  mitmproxy==12.2.3
+wafw00f    wafw00f==2.4.2
+arjun      arjun==2.2.7
+sublist3r  sublist3r==1.0
+# wfuzz removed: its pinned pycurl uses Py_TRASHCAN_SAFE_BEGIN, deleted in
+# Python 3.13, so it cannot build on the system interpreter. ffuf/feroxbuster
+# (module 30) cover the same fuzzing ground.

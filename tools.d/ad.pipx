@@ -1,0 +1,21 @@
+# ad.pipx — Core AD / network Python tools. One isolated pipx venv each.
+# Consumed by modules/20-ad-network.sh.
+# Format: "name" | "name==version" | "name  pip-spec-with-extras-or-git"
+#         add "--python X.Y" to pin one tool to an older interpreter
+# First build: leave unpinned. After a green build, freeze versions here.
+
+impacket        impacket==0.13.1
+# NetExec is not published to PyPI under any name — upstream ships it from git.
+netexec         git+https://github.com/Pennyw0rth/NetExec@af9bb8753c30e60be14b78cc1909cf2dbc96fff0
+certipy-ad      certipy-ad==5.1.0
+bloodyAD        bloodyAD==2.5.5
+coercer         coercer==2.4.3
+ldapdomaindump  ldapdomaindump==0.10.0
+adidnsdump      adidnsdump==1.4.0
+pywerview       pywerview==0.7.6
+# Likewise never on PyPI; the repo is the distribution channel.
+enum4linux-ng   git+https://github.com/cddmp/enum4linux-ng@v1.3.10
+smbmap          smbmap==1.10.8
+minikerberos    minikerberos==0.4.9
+# donpapi removed: its pinned lxml cannot compile against the Python 3.14 C API
+# (_PyLong_AsByteArray changed signature in 3.13). Revisit if upstream unpins.

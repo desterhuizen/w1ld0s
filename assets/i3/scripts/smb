@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# Check if port 445 (SMB) or 139 (NetBIOS) is listening
+if ss -ltn | grep -qE ':(445|139)\s'; then
+    echo "📁"
+    echo "📁"
+    echo "#00FF00"
+fi

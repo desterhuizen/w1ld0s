@@ -1,0 +1,7 @@
+# tools.git — the w1ld0s companion toolkit: target/attack state, enumeration
+# wrappers, payload helpers, offline cheatsheets, and the aliases file that
+# module 00 wires into ~/.zshrc. Consumed by modules/90-tools.sh.
+#
+# https, not git@: this must clone on a box with no SSH key and no GitHub
+# account. Override with $W1LD0S_TOOLS_REPO to point a fork somewhere else.
+https://github.com/desterhuizen/w1ld0s-tools.git

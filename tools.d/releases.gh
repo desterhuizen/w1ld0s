@@ -1,0 +1,28 @@
+# releases.gh — GitHub-release binaries. Consumed by modules (gh_release helper).
+# Format: <owner/repo>  <asset-regex>  <dest-relative-to-$HOME>
+# Lines are parsed by modules/80 (win/util binaries) and referenced by 60/40/30.
+#
+# @ARCH@ / @ARCH_ALT@ expand to THIS host's arch (x86_64|aarch64 / amd64|arm64).
+# Use them only for tools that run on the workstation. The pspy / PrintSpoofer /
+# GodPotato / RunasCs rows stay hardcoded on purpose: those are dropped on the
+# target, so their arch is the victim's and must not follow ours.
+
+# --- linux privesc recon binaries (module 80) ---
+DominicBreuker/pspy@v1.2.1  pspy32$                 tools/binaries/pspy/pspy32
+DominicBreuker/pspy@v1.2.1  pspy64$                 tools/binaries/pspy/pspy64
+
+# --- windows local-privesc binaries (module 80) ---
+itm4n/PrintSpoofer@v1.0  PrintSpoofer32.exe$     tools/binaries/printspoofer/PrintSpoofer32.exe
+itm4n/PrintSpoofer@v1.0  PrintSpoofer64.exe$     tools/binaries/printspoofer/PrintSpoofer64.exe
+BeichenDream/GodPotato@V1.20  GodPotato-NET4.exe$     tools/binaries/godpotato/GodPotato-NET4.exe
+
+# --- payload-dev / AD (module 60) ---
+antonioCoco/RunasCs@v1.5  RunasCs\.zip$           tools/binaries/runascs/RunasCs.zip
+
+# --- web (module 30) ---
+# Assets are named "<arch>-linux-feroxbuster.zip"; the old regex had the arch and
+# the name the wrong way round and could never match on any host.
+epi052/feroxbuster@v2.13.1  @ARCH@-linux-feroxbuster\.zip$        .local/tmp/feroxbuster.zip
+
+# --- cloud (module 40) ---
+trufflesecurity/trufflehog@v3.97.0  trufflehog.*linux.*@ARCH_ALT@.*tar\.gz$  .local/tmp/trufflehog.tar.gz

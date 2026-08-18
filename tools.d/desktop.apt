@@ -1,0 +1,58 @@
+# desktop.apt — i3 window manager stack + GUI extras (apt).
+# Consumed by modules/05-desktop-i3.sh. Ubuntu-native names (no kali-desktop-i3).
+
+# --- i3 core ---
+i3
+i3status
+i3blocks
+i3lock
+suckless-tools     # dmenu
+rofi
+picom              # compositor
+feh                # also sets the wallpaper (see 05-desktop-i3.sh)
+# nitrogen dropped: no longer in the Ubuntu 26.04 archive, and feh above already
+# covers the only thing we used it for.
+dunst              # notifications
+libnotify-bin
+
+# --- session / login ---
+# Installed but NOT activated: modules/05 only makes lightdm the display manager
+# when W1LD0S_DM=lightdm. Having the packages here is what keeps that opt-in a
+# one-liner. On a GNOME box gdm3 stays in charge and module 06 brands it instead.
+lightdm
+lightdm-gtk-greeter
+xorg
+xterm
+network-manager
+network-manager-gnome   # nm-applet
+policykit-1-gnome
+
+# --- terminal / editors / diff ---
+terminator
+meld
+
+# --- helpers ---
+arandr
+autorandr
+flameshot
+maim
+brightnessctl
+pavucontrol
+xdotool
+xclip
+fonts-font-awesome      # i3blocks glyphs
+fonts-firacode          # Kali's terminal font — terminator/i3 reference it
+fonts-hack
+fonts-noto
+fonts-noto-color-emoji
+
+# --- dark theme ---
+adwaita-icon-theme
+gnome-themes-extra      # provides Adwaita-dark for GTK apps under i3
+
+# --- GNOME shell cleanup (modules/07) ---
+desktop-file-utils      # desktop-file-edit: hides app-grid entries via NoDisplay
+
+# --- VMware guest integration (adjust for your hypervisor) ---
+open-vm-tools
+open-vm-tools-desktop

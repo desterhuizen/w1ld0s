@@ -1,0 +1,36 @@
+[Palette]
+# w1ld0s terminal palette — the same colours assets/terminator/config uses, so
+# the two terminals match. Installed to
+# ~/.local/share/org.gnome.Ptyxis/palettes/ by modules/07-gnome-shell.sh and
+# selected with `gsettings set …Profile: palette 'w1ld0s'`; that key stores the
+# palette NAME, which is why this file's basename and Name below are identical.
+#
+# Deliberately flat (no [Light]/[Dark] sections, like the shipped Aci palette):
+# this terminal is black in every interface style. A [Light] variant would make
+# `interface-style` flips silently produce a light terminal mid-engagement.
+Name=w1ld0s
+
+# Black, not gruvbox's #282828 — matches terminator's background_color and the
+# black desktop/greeter background.
+Background=#000000
+Foreground=#FFFFFF
+# The i3 accent ($amber in assets/i3/config), for a cursor you can find on black.
+Cursor=#F0A02A
+
+# gruvbox, normal then bright — identical to the terminator palette line.
+Color0=#282828
+Color1=#CC241D
+Color2=#98971A
+Color3=#D79921
+Color4=#458588
+Color5=#B16286
+Color6=#689D6A
+Color7=#A89984
+Color8=#928374
+Color9=#FB4934
+Color10=#B8BB26
+Color11=#FABD2F
+Color12=#83A598
+Color13=#D3869B
+Color14=#8EC07C
+Color15=#EBDBB2
