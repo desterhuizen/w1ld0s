@@ -42,6 +42,21 @@ if [ ! -x "$NGINX_BIN" ]; then
 elif [ ! -f "$SITE_SRC" ]; then
   warn "missing $SITE_SRC — skipping the web server config"
 else
+  # --- the blank error body -------------------------------------------------
+  # The site config points every error status at this file. It must exist and
+  # be empty: `return 404 ''` cannot produce an empty body (nginx ignores an
+  # empty text argument and serves its stock page instead), so the only way to
+  # get a truly bodyless error is to serve a zero-byte file. Kept outside
+  # $WEBROOT so it can never be listed or fetched directly.
+  BLANK_DIR=/usr/share/nginx/w1ld0s
+  sudo mkdir -p "$BLANK_DIR"
+  if [ ! -f "$BLANK_DIR/_blank" ] || [ -s "$BLANK_DIR/_blank" ]; then
+    sudo truncate -s 0 "$BLANK_DIR/_blank" 2>/dev/null \
+      || sudo sh -c ": > '$BLANK_DIR/_blank'" \
+      || warn "could not create $BLANK_DIR/_blank — errors will serve the stock page"
+    sudo chmod 644 "$BLANK_DIR/_blank" 2>/dev/null || true
+  fi
+
   # --- build the site config ------------------------------------------------
   # The headers-more directives are dropped when the module is not loadable.
   # The test is the load-time drop-in, not `dpkg -s`: it is the file nginx
