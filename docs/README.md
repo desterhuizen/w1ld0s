@@ -143,7 +143,7 @@ Three tiers, deliberately unequal in what they can prove.
 | Tier | What | When |
 |---|---|---|
 | Static | `tests/check.sh` — manifest shape and pinning, https-only clone URLs, `ALL_MODULES` vs the filesystem vs this file, the transitive-`die` trap, `.gitignore` integrity, secret patterns, shellcheck | Every push; seconds |
-| Container | `.github/workflows/smoke.yml` — runs `./bootstrap.sh` twice in `ubuntu:26.04` and asserts the second run changes nothing; also `nginx -t` and `i3 -C` against the shipped configs | Weekly, and on demand |
+| Container | `.github/workflows/smoke.yml` — runs `./bootstrap.sh` twice in `ubuntu:26.04` and asserts the second run changes nothing; also `nginx -t` and `i3 -C` against the shipped configs | Every PR into `main`; weekly; on demand |
 | Box | `tests/verify-box.sh` — see [Verification](#verification) | By hand, after a real install |
 
 ```bash
