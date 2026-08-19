@@ -1,0 +1,84 @@
+---
+# Mirrors the w1ld0s-tools workflow. Lints changed files on push and PR.
+name: Lint Code Base
+
+on:  # yamllint disable-line rule:truthy
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+  packages: read
+  statuses: write
+  # super-linter posts its summary as a PR comment; without these it fails the
+  # job on a 403 after all the linters have already passed.
+  issues: write
+  pull-requests: write
+
+jobs:
+  run-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        # Pinned to a commit SHA (v7.0.1) rather than a tag: a tag can be moved
+        # to point at different code, a SHA cannot.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          # Full git history is needed to get a proper list of changed files
+          # within `super-linter`
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Lint Code Base
+        # Pinned to a commit SHA (v8.7.0), same reasoning as above.
+        uses: super-linter/super-linter@4ce20838b8ab83717e78138c5b3a1407148e0918
+        env:
+          VALIDATE_ALL_CODEBASE: false
+          DEFAULT_BRANCH: "main"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Binary assets, and assets/zshrc — which is zsh, not bash.
+          # shellcheck has no zsh dialect and reads `zstyle` and ${(s.:.)x}
+          # as syntax errors. tests/check.sh runs `zsh -n` on it instead,
+          # which is the correct parser for that file.
+          FILTER_REGEX_EXCLUDE: "assets/(fonts|branding)/.*|assets/zshrc"
+
+          # --- Linters deliberately turned off -------------------------------
+          # shellcheck is owned by tests/check.sh, which runs it with -x, a
+          # `warning` severity floor, and .shellcheckrc. super-linter does NOT
+          # read .shellcheckrc and reports at info level, so leaving it on
+          # means two invocations with two different policies re-flagging the
+          # idioms the config exempts. One shellcheck, one policy.
+          VALIDATE_BASH: false
+          # Modules are SOURCED, not executed, so the executable bit carries no
+          # meaning here. tests/check.sh checks the bits agree with each other,
+          # which is the property that actually matters.
+          VALIDATE_BASH_EXEC: false
+          # shfmt is a formatter, not a correctness check — it wants every
+          # script reindented to tabs.
+          VALIDATE_SHELL_SHFMT: false
+          # Same category: prettier reformats YAML. yamllint still runs and
+          # checks these workflow files for actual problems.
+          VALIDATE_YAML_PRETTIER: false
+          # Both READMEs open with a <p align="center"> banner and run long
+          # prose lines, so MD013/MD033/MD041 would be a wall of noise. The
+          # docs invariant that actually matters — the module table tracking
+          # ALL_MODULES — is enforced by tests/check.sh, not by a linter.
+          VALIDATE_MARKDOWN: false
+          VALIDATE_MARKDOWN_PRETTIER: false
+          # Prose style checking over offensive-security cheatsheets and
+          # postmortems produces nothing actionable.
+          VALIDATE_NATURAL_LANGUAGE: false
+          # The three workflows share boilerplate (checkout, SHA pins,
+          # persist-credentials) on purpose; duplication is the point.
+          VALIDATE_JSCPD: false
+          # No JS/TS in this repo — biome only fires on incidental JSON.
+          VALIDATE_BIOME_LINT: false
+          VALIDATE_BIOME_FORMAT: false
+          # IaC/vulnerability scanners aimed at deployed infrastructure. This
+          # repo has one throwaway test container and three workflows; zizmor
+          # and actionlint (both left ON) cover the workflows properly, and
+          # these two only report on the base image's own CVEs.
+          VALIDATE_CHECKOV: false
+          VALIDATE_TRIVY: false

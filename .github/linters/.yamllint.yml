@@ -1,0 +1,14 @@
+---
+# super-linter reads linter configs from .github/linters by default.
+extends: default
+
+rules:
+  # The long lines in these workflows are shell inside `run:` blocks — apt
+  # invocations, curl pipelines, nginx paths. Wrapping them at 80 to satisfy
+  # a YAML rule would make the shell harder to read, not easier.
+  line-length:
+    max: 120
+  # `on:` is a YAML 1.1 boolean; in a workflow it is the trigger key. The
+  # workflows already carry a disable-line comment, this makes it explicit.
+  truthy:
+    check-keys: false

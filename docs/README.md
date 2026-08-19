@@ -39,7 +39,9 @@ assets/               dotfiles imported verbatim: zshrc, tmux.conf, i3/, fonts/,
                       terminator/, ptyxis/ (the GNOME terminal's palette keyfile)
 assets/branding/      w1ld0s.png (logo + wallpaper), w1ld0s-grub.png (1920x1080
                       GRUB background), w1ld0s-splash.png (Plymouth watermark)
-docs/                 this file + the AD collection cheatsheet
+docs/                 this file, the AD collection cheatsheet, the Debian port note
+tests/                check.sh (static, per push), verify-box.sh (on a real box),
+                      box-state.sh (idempotence digest), Dockerfile + check-docker.sh
 ```
 
 Paths set in `lib/common.sh`: `OPT_DIR=/opt/w1ld0s`, `VENV_DIR=$OPT_DIR/venvs`, `TOOLS_DIR=$OPT_DIR/tools`, `WORDLISTS_DIR=$OPT_DIR/wordlists`, `BIN_DIR=~/.local/bin`, `REPOS_DIR=~/tools/repos`, `BINARIES_DIR=~/tools/binaries`.
@@ -134,53 +136,79 @@ Session settings need a live D-Bus session bus, which `bootstrap.sh` usually doe
 7. Log out and pick your session at the greeter (GNOME or i3 — both are listed), open a new zsh, `hash -r`. If the desktop came up unbranded, run `w1ld0s-wallpaper` and `w1ld0s-gnome` from inside the session.
 8. **Snapshot the VM as `clean-base`.**
 
-## Verification
+## Checks
+
+Three tiers, deliberately unequal in what they can prove.
+
+| Tier | What | When |
+|---|---|---|
+| Static | `tests/check.sh` — manifest shape and pinning, https-only clone URLs, `ALL_MODULES` vs the filesystem vs this file, the transitive-`die` trap, `.gitignore` integrity, secret patterns, shellcheck | Every push; seconds |
+| Container | `.github/workflows/smoke.yml` — runs `./bootstrap.sh` twice in `ubuntu:26.04` and asserts the second run changes nothing; also `nginx -t` and `i3 -C` against the shipped configs | Weekly, and on demand |
+| Box | `tests/verify-box.sh` — see [Verification](#verification) | By hand, after a real install |
 
 ```bash
-pipx list                      # one venv per tool
-impacket-secretsdump -h
-nxc --version
-certipy -h
-bloodhound-ce-python -h        # resolves from the dedicated venv
-echo $ROCKYOU && ls -l "$ROCKYOU"
-
-getent passwd "$USER" | cut -d: -f7                       # /usr/bin/zsh
-diff <(bash -lic 'echo $LS_COLORS' 2>/dev/null | tail -1) \
-     <(zsh  -ic  'echo $LS_COLORS' 2>/dev/null | tail -1)  # no output = colours match
-zsh -ic 'echo ok' 2>&1 | grep -v '^ok$'                    # any output is a broken line in ~/.zshrc
-
-whatweb --version                                          # exits 1 listing gems if addressable is missing
-whatweb 127.0.0.1                                          # runs through the ~/.local/bin symlink
-
-echo hi > /var/www/html/probe.txt                          # webroot is yours, no sudo
-curl -sI http://127.0.0.1/probe.txt                        # Content-Type/Length/Connection/Accept-Ranges only
-curl -si http://127.0.0.1/nope | head -3                   # 404, empty body, no Server
+./tests/check.sh              # from a Linux box or the CI runner
+./tests/check-docker.sh       # from anywhere Docker runs, including macOS
+./tests/check.sh --strict     # warnings become failures
 ```
+
+`check.sh` targets Linux, bash 5 and GNU userland on purpose — it is not macOS
+compatible. `check-docker.sh` runs the identical script in the same `ubuntu:26.04`
+image CI uses, so "it passed locally" and "it passed in CI" mean the same thing.
+
+**What none of this catches.** Anything you have to look at: GRUB, Plymouth, the LUKS
+prompt, the greeter, the dock, wallpapers, fonts. Anything needing systemd or hardware
+— nginx surviving a reboot, `vmtoolsd`, wireless, SDR, Bluetooth, the VMware share.
+Whether a tool *works* rather than merely *installs*: CI can see that `netexec` got a
+venv, not that it authenticates against a signing-enforced DC. And whether a pinned
+version is the *right* version. A green badge means the repo is consistent and a
+container provisioned — never that the box boots branded and working.
+
+## Verification
+
+Run the verifier on the box, after `./bootstrap.sh` and a reboot:
+
+```bash
+./tests/verify-box.sh          # auto-detects which modules ran
+./tests/verify-box.sh 00 35    # only these groups
+./tests/verify-box.sh -v       # also print every passing check
+```
+
+It asserts everything that can be asserted from a shell — every `.pipx`, `.go` and
+`releases.gh` tool actually present, zsh as the login shell, exactly one `~/.zshrc`
+w1ld0s block, bash-identical `LS_COLORS`, a clean `zsh -ic` startup, the webserver's
+header suppression and bodyless 404, Plymouth's `ImageDir`, the GRUB keys, the
+recompiled greeter database, and the Ptyxis palette keyfile — and then prints the
+short list of things that still need a human eye.
+
+Run it **inside a desktop session** if you want the GNOME group checked: `gsettings`
+returns empty over SSH, so the script skips that group with a note rather than
+manufacturing failures. Groups whose module never ran are skipped too, so running a
+subset of the bootstrap does not produce a wall of red.
 
 The shell is zsh (oh-my-zsh, its own prompt), but the **colours are bash's**: the w1ld0s block runs the same `dircolors -b` Ubuntu's stock `~/.bashrc` runs — honouring `~/.dircolors` if you drop one in — and hands the same table to zsh's completion menu, which is uncoloured otherwise. It is set outright rather than left to oh-my-zsh, which only calls `dircolors` when `LS_COLORS` is empty and so quietly diverges from bash on any box where something exports it first.
 
-Check the aliases resolve in a fresh zsh (`htricks`, `gtfo`, `ysorerial`, `$IP`), that i3 starts with your config and fonts, and that a second full `./bootstrap.sh` run changes nothing. Then snapshot.
+Branding is the one area where `module X done` proves least — verify it against box state, not the log: That is why the verifier reads Plymouth's `.plymouth` file, greps
+`/etc/default/grub`, and `strings` the compiled greeter database instead of trusting
+the log.
 
-Branding is the one area where `module X done` proves least — verify it against box state, not the log:
-
-```bash
-grep ImageDir /usr/share/plymouth/themes/w1ld0s/w1ld0s.plymouth   # must end in /w1ld0s
-sudo grep -E 'GRUB_(TIMEOUT|BACKGROUND)' /etc/default/grub
-sudo strings /var/lib/gdm3/greeter-dconf-defaults | grep w1ld0s   # greeter db recompiled
-gsettings get org.gnome.shell favorite-apps
-gsettings get org.gnome.shell.extensions.dash-to-dock dock-fixed  # false = actually autohides
-gsettings get org.gnome.Ptyxis font-name                          # 'Fira Code Medium 10'
-```
-
-The Ptyxis palette is the one setting whose value proves nothing on its own — the key stores a palette *name*, so it reads back `'w1ld0s'` whether or not the keyfile parsed. Check the file itself:
-
-```bash
-python3 -c "from gi.repository import GLib; k=GLib.KeyFile(); \
-k.load_from_file('$HOME/.local/share/org.gnome.Ptyxis/palettes/w1ld0s.palette', 0); \
-print(k.get_string('Palette','Name'), len(k.get_keys('Palette')[0]), 'keys')"   # w1ld0s 20 keys
-```
+The Ptyxis palette is the one setting whose value proves nothing on its own — the key stores a palette *name*, so it reads back `'w1ld0s'` whether or not the keyfile parsed. Check the file itself: The verifier parses it and counts the keys, which is the only real
+evidence the palette landed.
 
 App-grid and folder changes need a shell restart; on Wayland that means logging out and back in, since `Alt+F2 r` is X11-only. Ptyxis reads palette files at startup, so close every window before judging its colours.
+
+To confirm the idempotence invariant explicitly:
+
+```bash
+./tests/box-state.sh > /tmp/s1 && ./bootstrap.sh && ./tests/box-state.sh > /tmp/s2
+diff /tmp/s1 /tmp/s2      # any output at all is an idempotence defect
+```
+
+`box-state.sh` prints only what must be byte-stable — the `~/.zshrc` digest and its
+marker counts, the login shell, the `~/.local/bin` symlink set with targets, and any
+`*.w1ld0s.bak` files. It deliberately does not diff filesystem trees: `clone_or_pull`
+fast-forwards every checkout on every run by design, so a tree diff would always be
+noisy and would prove nothing.
 
 ## Pinning
 

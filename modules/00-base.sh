@@ -130,6 +130,7 @@ if ! grep -qF "$ZMARK_BEGIN" "$HOME/.zshrc"; then
   log "Appending w1ld0s block to ~/.zshrc…"
   { printf '\n'; cat "$ZBLOCK"; } >> "$HOME/.zshrc"
 elif diff -q <(sed -n "/^$ZMARK_BEGIN\$/,/^$ZMARK_END\$/p" "$HOME/.zshrc") "$ZBLOCK" >/dev/null 2>&1; then
+  # shellcheck disable=SC2088  # "~/.zshrc" here is message prose, not a path
   log "~/.zshrc w1ld0s block is current"
 else
   log "Refreshing the w1ld0s block in ~/.zshrc…"

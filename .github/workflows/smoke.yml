@@ -1,0 +1,178 @@
+---
+# Tier 2: actually run bootstrap.sh in an ubuntu:26.04 container, twice, and
+# assert the second run changes nothing.
+#
+# Never on push: a 40-minute job triggered by a manifest typo is the fastest
+# way to make people stop reading CI.
+name: Smoke (container)
+
+on:  # yamllint disable-line rule:truthy
+  workflow_dispatch:
+    inputs:
+      modules:
+        description: "Modules to run (space separated, bootstrap.sh prefixes)"
+        default: "00 07 10 90 95 99"
+  schedule:
+    # Weekly, not nightly. The failures this catches — a package dropped from
+    # the archive, an upstream tag deleted, an installer changing shape — move
+    # on a scale of weeks. GitHub disables schedules after 60 days of repo
+    # inactivity, so the dispatch path must keep working on its own.
+    - cron: "0 3 * * 0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bootstrap:
+    strategy:
+      fail-fast: false
+      matrix:
+        # The operator's real build is aarch64. On an x86_64-only runner every
+        # aarch64 branch in the repo is dead code — module 60's multilib skip,
+        # module 30's LinuxArm64 Burp selection, gh_release's @ARCH@ expansion,
+        # and check_foreign_i386, which returns immediately on x86_64 and so is
+        # never exercised there. Arm runners are free for public repos.
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    container:
+      image: ubuntu:26.04
+      options: --user root
+    env:
+      MODULES: ${{ github.event.inputs.modules || '00 07 10 90 95 99' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Create the non-root operator user
+        # lib/common.sh:65-66 refuses to run as root and requires sudo. A
+        # normal user with a NOPASSWD drop-in satisfies both with no repo
+        # change, and keeps bootstrap.sh's `sudo -v` keepalive working.
+        run: |
+          set -eux
+          apt-get update -qq
+          apt-get install -y --no-install-recommends \
+            sudo ca-certificates curl git openssh-client locales tzdata
+          useradd -m -s /bin/bash w1ld0s
+          printf 'w1ld0s ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/w1ld0s
+          chmod 0440 /etc/sudoers.d/w1ld0s
+          # actions/checkout writes as root in a container job.
+          chown -R w1ld0s:w1ld0s "$GITHUB_WORKSPACE"
+
+      - name: Authenticate the GitHub API for gh_release
+        # gh_release curls api.github.com unauthenticated: 60 requests/hour per
+        # source IP, shared across hosted runners, so 403s are likely.
+        #
+        # .netrc is HOST-SCOPED, which is the whole point. Putting an
+        # Authorization header in .curlrc instead would attach the token to
+        # every other curl in the run — PortSwigger, Brave's S3 bucket,
+        # go.dev, Microsoft. Do not do that. Release assets redirect to
+        # objects.githubusercontent.com and curl does not forward .netrc
+        # credentials across a host change, so downloads stay anonymous.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          printf 'machine api.github.com\n  login x-access-token\n  password %s\n' \
+            "$GH_TOKEN" > /home/w1ld0s/.netrc
+          printf 'netrc\n' > /home/w1ld0s/.curlrc
+          chown w1ld0s:w1ld0s /home/w1ld0s/.netrc /home/w1ld0s/.curlrc
+          chmod 600 /home/w1ld0s/.netrc /home/w1ld0s/.curlrc
+
+      - name: Run 1
+        # </dev/null is load-bearing: modules/90-tools.sh calls ssh-keygen with
+        # no -N "", so it prompts for a passphrase. EOF on stdin yields an empty
+        # one and it proceeds; without the redirect the job hangs until timeout.
+        run: |
+          sudo -u w1ld0s -H bash -c \
+            'cd "$1" && ./bootstrap.sh $2' _ "$GITHUB_WORKSPACE" "$MODULES" \
+            </dev/null 2>&1 | tee run1.log
+          # The redirect deliberately runs as the workflow user; only
+          # box-state.sh itself needs to be w1ld0s, so it reads that $HOME.
+          # shellcheck disable=SC2024
+          sudo -u w1ld0s -H "$GITHUB_WORKSPACE/tests/box-state.sh" > state1.txt
+
+      - name: Run 2
+        run: |
+          sudo -u w1ld0s -H bash -c \
+            'cd "$1" && ./bootstrap.sh $2' _ "$GITHUB_WORKSPACE" "$MODULES" \
+            </dev/null 2>&1 | tee run2.log
+          # shellcheck disable=SC2024
+          sudo -u w1ld0s -H "$GITHUB_WORKSPACE/tests/box-state.sh" > state2.txt
+
+      - name: Assert idempotence
+        run: |
+          set -u
+          rc=0
+          if diff -u state1.txt state2.txt; then
+            echo "OK: box state unchanged by the second run"
+          else
+            echo "FAIL: the second run changed the box"; rc=1
+          fi
+          # A warning that appears only on the second run is an idempotence
+          # defect by definition. Strip ANSI first — the logs are coloured.
+          sed 's/\x1b\[[0-9;]*m//g' run1.log | grep '^\[!\]' | sort -u > w1.txt || true
+          sed 's/\x1b\[[0-9;]*m//g' run2.log | grep '^\[!\]' | sort -u > w2.txt || true
+          if new=$(comm -13 w1.txt w2.txt) && [ -n "$new" ]; then
+            echo "FAIL: warnings present only on the second run:"; echo "$new"; rc=1
+          else
+            echo "OK: no new warnings on the second run"
+          fi
+          exit "$rc"
+
+      - name: Verify the box
+        # Everything module-gated that can be checked without a session bus.
+        run: |
+          sudo -u w1ld0s -H bash -c \
+            'cd "$1" && ./tests/verify-box.sh -v' _ "$GITHUB_WORKSPACE" 2>&1 | tee verify.log
+
+      - name: nginx config and headers
+        # Module 35 itself needs systemd, but the shipped config does not —
+        # and the config is the part that carries the behaviour. nginx
+        # daemonises itself, so no init system is involved. Both branches are
+        # tested: with the headers-more filter, and without it.
+        run: |
+          set -eux
+          apt-get install -y --no-install-recommends nginx libnginx-mod-http-headers-more-filter
+          install -m644 "$GITHUB_WORKSPACE/assets/nginx/w1ld0s.conf" /etc/nginx/sites-available/w1ld0s
+          ln -sf /etc/nginx/sites-available/w1ld0s /etc/nginx/sites-enabled/w1ld0s
+          rm -f /etc/nginx/sites-enabled/default
+          mkdir -p /var/www/html && echo probe > /var/www/html/probe.txt
+          nginx -t
+          nginx
+          curl -sI http://127.0.0.1/probe.txt | tee h.txt
+          for bad in Server Date Last-Modified ETag; do
+            ! grep -qi "^$bad:" h.txt || { echo "FAIL: response leaks $bad"; exit 1; }
+          done
+          [ "$(curl -s http://127.0.0.1/nope | wc -c)" -eq 0 ] || { echo "FAIL: 404 has a body"; exit 1; }
+          nginx -s stop
+          # Now the fallback path module 35 takes when the filter is missing.
+          sed -i '/# needs headers-more$/d' /etc/nginx/sites-available/w1ld0s
+          nginx -t
+
+      - name: i3 config parses
+        run: |
+          set -eux
+          apt-get install -y --no-install-recommends i3
+          i3 -C -c "$GITHUB_WORKSPACE/assets/i3/config"
+
+      - name: Upload logs
+        if: always()
+        # Pinned to a commit SHA (v7.0.1).
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: smoke-${{ matrix.runner }}
+          path: |
+            run1.log
+            run2.log
+            state1.txt
+            state2.txt
+            verify.log
+          if-no-files-found: ignore

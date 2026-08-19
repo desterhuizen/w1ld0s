@@ -63,6 +63,9 @@ ok "app grid: $hidden entries hidden ($skipped listed but not installed)"
 # Both are generated rather than shipped under assets/ because the Exec path has
 # to follow $OPT_DIR.
 gen_launcher() {  # gen_launcher <id> <name> <comment> <exec> <icon> [extra-lines]
+  # shellcheck disable=SC2178,SC2128  # false positive: `extra` collides with
+  # the unrelated `local -a extra` in lib/common.sh:174 (pipx_tool). Both are
+  # function-local; shellcheck leaks the array type across external-sources.
   local id="$1" name="$2" comment="$3" exec_="$4" icon="$5" extra="${6:-}"
   {
     printf '[Desktop Entry]\n'
@@ -70,6 +73,7 @@ gen_launcher() {  # gen_launcher <id> <name> <comment> <exec> <icon> [extra-line
     printf 'Type=Application\nName=%s\nComment=%s\n' "$name" "$comment"
     printf 'Exec="%s" %%U\nIcon=%s\n' "$exec_" "$icon"
     printf 'Categories=Development;Security;\nTerminal=false\n'
+    # shellcheck disable=SC2128  # same false positive as above
     [ -z "$extra" ] || printf '%s\n' "$extra"
   } > "$APPS_DIR/$id.desktop"
   chmod 644 "$APPS_DIR/$id.desktop"
