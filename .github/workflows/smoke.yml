@@ -22,6 +22,14 @@ on:  # yamllint disable-line rule:truthy
 permissions:
   contents: read
 
+# Container jobs default to `sh -e {0}`, which has no pipefail — so every step
+# ending in `| tee` reported tee's status and could never fail. That silently
+# disarmed Run 1, Run 2 and Verify the box, the three steps this job exists
+# for. `bash` gives `bash -e -o pipefail`.
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: smoke-${{ github.ref }}
   cancel-in-progress: true
@@ -130,8 +138,11 @@ jobs:
       - name: Verify the box
         # Everything module-gated that can be checked without a session bus.
         run: |
+          # Pass the same module subset that was provisioned, or the verifier
+          # asserts tools belonging to modules this run never executed.
           sudo -u w1ld0s -H bash -c \
-            'cd "$1" && ./tests/verify-box.sh -v' _ "$GITHUB_WORKSPACE" 2>&1 | tee verify.log
+            'cd "$1" && ./tests/verify-box.sh -v $2' _ "$GITHUB_WORKSPACE" "$MODULES" \
+            2>&1 | tee verify.log
 
       - name: nginx config and headers
         # Module 35 itself needs systemd, but the shipped config does not —
