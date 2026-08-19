@@ -22,6 +22,14 @@ on:  # yamllint disable-line rule:truthy
 permissions:
   contents: read
 
+# Container jobs default to `sh -e {0}`, which has no pipefail — so every step
+# ending in `| tee` reported tee's status and could never fail. That silently
+# disarmed Run 1, Run 2 and Verify the box, the three steps this job exists
+# for. `bash` gives `bash -e -o pipefail`.
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: smoke-${{ github.ref }}
   cancel-in-progress: true
