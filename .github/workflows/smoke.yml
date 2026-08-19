@@ -2,11 +2,16 @@
 # Tier 2: actually run bootstrap.sh in an ubuntu:26.04 container, twice, and
 # assert the second run changes nothing.
 #
-# Never on push: a 40-minute job triggered by a manifest typo is the fastest
-# way to make people stop reading CI.
+# Never on push, and never on a PR into staging: a 40-minute job triggered by a
+# manifest typo is the fastest way to make people stop reading CI. It runs on
+# PRs into main only, which is the staging -> main promotion — the one moment
+# the cost is worth paying, and the only way this can be a required check
+# there. A required check that never reports blocks the PR forever.
 name: Smoke (container)
 
 on:  # yamllint disable-line rule:truthy
+  pull_request:
+    branches: ["main"]
   workflow_dispatch:
     inputs:
       modules:
