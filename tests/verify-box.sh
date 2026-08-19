@@ -36,31 +36,53 @@ want() { # want <module-prefix> <auto-detect-cmd>
 
 # ---------------------------------------------------------------------------
 if want 00 'have pipx'; then
-  section "Toolchain and Python isolation (00, 10, 20, 30, 40, 50)"
+  section "Toolchain and Python isolation (00, 10)"
 
-  if have pipx; then
-    installed="$(pipx list --short 2>/dev/null | awk '{print $1}')"
-    for m in tools.d/*.pipx; do
-      while read -r name _; do
-        [ -n "$name" ] || continue
-        if printf '%s\n' "$installed" | grep -qix "$name"; then pass "pipx: $name"
-        else fail "pipx: $name not installed (from $m)"; fi
-      done < <(rl "$m")
-    done
-  else skip "pipx absent — Python tool checks skipped"; fi
+  have pipx && pass "pipx present" || fail "pipx missing (module 10)"
 
-  # go install drops binaries in ~/go/bin named for the last path segment,
-  # after stripping the @version and any /vN module-major suffix.
-  for m in tools.d/*.go; do
-    while read -r spec; do
-      [ -n "$spec" ] || continue
-      p="${spec%@*}"; p="${p%/v[0-9]}"; b="${p##*/}"
-      [ -x "$HOME/go/bin/$b" ] && pass "go: $b" || fail "go: $HOME/go/bin/$b missing (from $spec)"
-    done < <(rl "$m")
-  done
+  if [ -n "${ROCKYOU:-}" ]; then
+    [ -f "$ROCKYOU" ] && pass "\$ROCKYOU exists: $ROCKYOU" || fail "\$ROCKYOU set but missing: $ROCKYOU"
+  else warn "\$ROCKYOU unset (run from an interactive shell that sourced ~/.zshrc)"; fi
+fi
 
-  # Only the persistent destinations. The .local/tmp rows are archives that
-  # the modules unpack and discard, so their absence is correct.
+# Each manifest is checked only when the module that installs it ran. Gating
+# them all behind module 00 asserted every AD/web/cloud/RE tool on a box that
+# had only run 00 07 10 90 95 99, which is 45 failures that mean nothing.
+# The mapping is the module table in docs/README.md.
+check_pipx() {  # check_pipx <manifest>
+  local m="tools.d/$1" installed name
+  [ -f "$m" ] || return 0
+  have pipx || { skip "pipx absent — $1 not checked"; return 0; }
+  installed="$(pipx list --short 2>/dev/null | awk '{print $1}')"
+  while read -r name _; do
+    [ -n "$name" ] || continue
+    if printf '%s\n' "$installed" | grep -qix "$name"; then pass "pipx: $name"
+    else fail "pipx: $name not installed (from $m)"; fi
+  done < <(rl "$m")
+}
+
+# go install drops binaries in ~/go/bin named for the last path segment, after
+# stripping the @version and any /vN module-major suffix.
+check_go() {  # check_go <manifest>
+  local m="tools.d/$1" spec p b
+  [ -f "$m" ] || return 0
+  while read -r spec; do
+    [ -n "$spec" ] || continue
+    p="${spec%@*}"; p="${p%/v[0-9]}"; b="${p##*/}"
+    [ -x "$HOME/go/bin/$b" ] && pass "go: $b" || fail "go: $HOME/go/bin/$b missing (from $spec)"
+  done < <(rl "$m")
+}
+
+if want 20 'have nxc'; then section "AD and network tools (20)"; check_pipx ad.pipx; fi
+if want 30 'have ffuf'; then section "Web tools (30)"; check_pipx web.pipx; check_go web.go; fi
+if want 40 'have aws'; then section "Cloud tools (40)"; check_pipx cloud.pipx; fi
+if want 50 'have r2'; then section "RE and binary tools (50)"; check_pipx re.pipx; fi
+if want 60 'have garble'; then section "Payload dev (60)"; check_go payload.go; fi
+
+if want 80 '[ -d "$HOME/tools/binaries" ]'; then
+  section "Release binaries (80)"
+  # Only the persistent destinations. The .local/tmp rows are archives that the
+  # modules unpack and discard, so their absence is correct.
   while read -r _ _ dest; do
     [ -n "$dest" ] || continue
     case "$dest" in
@@ -68,14 +90,6 @@ if want 00 'have pipx'; then
       *) [ -e "$HOME/$dest" ] && pass "gh_release: $dest" || fail "gh_release: ~/$dest missing" ;;
     esac
   done < <(rl tools.d/releases.gh)
-
-  for c in nxc certipy impacket-secretsdump bloodhound-ce-python; do
-    have "$c" && pass "on PATH: $c" || warn "not on PATH: $c"
-  done
-
-  if [ -n "${ROCKYOU:-}" ]; then
-    [ -f "$ROCKYOU" ] && pass "\$ROCKYOU exists: $ROCKYOU" || fail "\$ROCKYOU set but missing: $ROCKYOU"
-  else warn "\$ROCKYOU unset (run from an interactive shell that sourced ~/.zshrc)"; fi
 fi
 
 # ---------------------------------------------------------------------------

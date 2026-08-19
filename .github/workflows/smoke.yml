@@ -138,8 +138,11 @@ jobs:
       - name: Verify the box
         # Everything module-gated that can be checked without a session bus.
         run: |
+          # Pass the same module subset that was provisioned, or the verifier
+          # asserts tools belonging to modules this run never executed.
           sudo -u w1ld0s -H bash -c \
-            'cd "$1" && ./tests/verify-box.sh -v' _ "$GITHUB_WORKSPACE" 2>&1 | tee verify.log
+            'cd "$1" && ./tests/verify-box.sh -v $2' _ "$GITHUB_WORKSPACE" "$MODULES" \
+            2>&1 | tee verify.log
 
       - name: nginx config and headers
         # Module 35 itself needs systemd, but the shipped config does not —
