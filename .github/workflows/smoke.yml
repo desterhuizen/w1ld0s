@@ -144,6 +144,12 @@ jobs:
           install -m644 "$GITHUB_WORKSPACE/assets/nginx/w1ld0s.conf" /etc/nginx/sites-available/w1ld0s
           ln -sf /etc/nginx/sites-available/w1ld0s /etc/nginx/sites-enabled/w1ld0s
           rm -f /etc/nginx/sites-enabled/default
+          # Mirrors what modules/35-webserver.sh creates: the zero-byte file
+          # every error status is served from. Without it errors 404 on the
+          # error handler itself and fall back to the stock page.
+          install -d /usr/share/nginx/w1ld0s
+          : > /usr/share/nginx/w1ld0s/_blank
+          chmod 644 /usr/share/nginx/w1ld0s/_blank
           mkdir -p /var/www/html && echo probe > /var/www/html/probe.txt
           nginx -t
           nginx
@@ -152,6 +158,12 @@ jobs:
             ! grep -qi "^$bad:" h.txt || { echo "FAIL: response leaks $bad"; exit 1; }
           done
           [ "$(curl -s http://127.0.0.1/nope | wc -c)" -eq 0 ] || { echo "FAIL: 404 has a body"; exit 1; }
+          # A disallowed method must be masked as the same blank 404.
+          [ "$(curl -s -X POST -o /dev/null -w '%{http_code}' http://127.0.0.1/probe.txt)" = 404 ] \
+            || { echo "FAIL: POST is distinguishable from a miss"; exit 1; }
+          # `internal` must keep the blank file itself unfetchable.
+          [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/_blank)" = 404 ] \
+            || { echo "FAIL: /_blank is directly reachable"; exit 1; }
           nginx -s stop
           # Now the fallback path module 35 takes when the filter is missing.
           sed -i '/# needs headers-more$/d' /etc/nginx/sites-available/w1ld0s
