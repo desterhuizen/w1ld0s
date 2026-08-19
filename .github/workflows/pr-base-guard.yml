@@ -1,0 +1,43 @@
+---
+# Work reaches main through staging. Nothing here can make that the default:
+# GitHub bases a new PR on the repository's default branch, and the default
+# branch has to stay main, because README.md and docs/README.md both tell a
+# stranger to `git clone` without --branch. Whatever sits on main is what
+# provisions the next fresh box.
+#
+# So the base is checked rather than defaulted. A feature branch that opens
+# against main fails here with the command to retarget it, instead of merging
+# straight past staging and the smoke job that only runs on the promotion.
+name: PR Base Guard
+
+on:  # yamllint disable-line rule:truthy
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  check-base:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only staging or hotfix/* may target main
+        env:
+          # Passed through the environment rather than interpolated into the
+          # run: block. A branch name is untrusted text, and ${{ }} is
+          # substituted before the shell ever sees the script, so a branch
+          # named with a backtick would execute on the runner.
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          case "$HEAD_REF" in
+            staging | hotfix/*)
+              echo "$HEAD_REF -> main: allowed."
+              ;;
+            *)
+              echo "::error::'$HEAD_REF' may not target main."
+              echo "Work reaches main through staging. Retarget with:"
+              echo "    gh pr edit --base staging"
+              echo "Urgent fixes may target main from a hotfix/* branch."
+              exit 1
+              ;;
+          esac
