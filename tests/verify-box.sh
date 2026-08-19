@@ -85,12 +85,12 @@ if want 00 'grep -q ">>> w1ld0s >>>" "$HOME/.zshrc"'; then
   s="$(getent passwd "${USER:-$(id -un)}" | cut -d: -f7)"
   [ "$s" = "/usr/bin/zsh" ] && pass "login shell is zsh" || fail "login shell is $s, expected /usr/bin/zsh"
 
-  b="$(grep -c '^# >>> w1ld0s >>>' "$HOME/.zshrc" 2>/dev/null || echo 0)"
-  e="$(grep -c '^# <<< w1ld0s <<<' "$HOME/.zshrc" 2>/dev/null || echo 0)"
+  b="$(count_lines '^# >>> w1ld0s >>>' "$HOME/.zshrc")"
+  e="$(count_lines '^# <<< w1ld0s <<<' "$HOME/.zshrc")"
   { [ "$b" = "1" ] && [ "$e" = "1" ]; } && pass "exactly one w1ld0s block in ~/.zshrc" \
     || fail "\$HOME/.zshrc has $b begin / $e end markers, expected 1 / 1"
 
-  g="$(grep -c '  # gems$' "$HOME/.zshrc" 2>/dev/null || echo 0)"
+  g="$(count_lines '  # gems$' "$HOME/.zshrc")"
   [ "$g" -le 1 ] && pass "at most one gems PATH line" || fail "\$HOME/.zshrc has $g '# gems' PATH lines"
 
   if have zsh; then

@@ -40,6 +40,17 @@ pass() {
 }
 section() { printf '\n%s== %s%s\n' "$_C_BLU" "$*" "$_C_OFF"; }
 
+# Count matching lines, safely.
+#
+# `grep -c` PRINTS "0" and EXITS 1 when nothing matches, so the obvious
+# `$(grep -c ... || echo 0)` runs both sides and yields a two-line "0\n0" —
+# which then breaks any numeric test that consumes it. Always use this.
+count_lines() {  # count_lines <pattern> <file>
+  local n
+  n="$(grep -c "$1" "$2" 2>/dev/null)" || n=0
+  printf '%s' "${n:-0}"
+}
+
 # Parse common flags. Callers pass "$@" and use the remaining args via
 # TESTS_ARGS afterwards, so a script can take positional args of its own.
 TESTS_ARGS=()

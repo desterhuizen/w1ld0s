@@ -76,6 +76,18 @@ for f in "${SHELL_FILES[@]}"; do
   else warn "shebang: $f has '$(head -1 "$f")'"; fi
 done
 
+# `grep -c` prints "0" AND exits 1 on no match, so `$(grep -c … || echo 0)`
+# runs both sides and produces a two-line "0\n0" that breaks the numeric test
+# consuming it. This shipped once and failed the smoke job. Use count_lines.
+# `ech[o]` is bracketed and comment lines are dropped so this check does not
+# match its own source — the same self-matching trap as the secret patterns.
+bad_count="$(grep -nE 'grep -c[^|]*\|\|[[:space:]]*ech[o]' "${SHELL_FILES[@]}" /dev/null \
+  | grep -vE ':[0-9]+:[[:space:]]*#' || true)"
+if [ -n "$bad_count" ]; then
+  fail "double-counting count idiom — use count_lines from tests/lib.sh:"
+  printf '%s\n' "$bad_count" | sed 's/^/       /'
+else pass "no double-counting count idiom"; fi
+
 # ---------------------------------------------------------------------------
 section "Manifest shape and pinning"
 
