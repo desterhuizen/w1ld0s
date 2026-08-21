@@ -22,6 +22,17 @@ cd "$ROOT" || exit 1
 rl() { sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^[[:space:]]*$/d' "$1"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# A version mismatch is a WARN, not a FAIL. The tool works; what has stopped
+# being true is that the manifests are the lockfile — the next VM built from
+# this commit will not be this box. fail stays reserved for "not installed".
+# Fix it either way round: bump the pin and rebuild, or ./tests/freeze-pins.sh
+# to move the manifest onto what this box proved.
+drift() {  # drift <what> <manifest> <pinned> <installed>
+  if   [ -z "$4" ];     then warn "$1: installed version unknown (cannot compare with $3)"
+  elif [ "$3" = "$4" ]; then pass "$1 $4 matches $2"
+  else                       warn "$1: box has $4, $2 pins $3"; fi
+}
+
 # A group runs if it was named on the command line, or — when nothing was
 # named — if the box carries evidence that its module ran. Someone who ran
 # `./bootstrap.sh 00 10 90` must get skips for branding, not failures.
@@ -45,31 +56,84 @@ if want 00 'have pipx'; then
   else warn "\$ROCKYOU unset (run from an interactive shell that sourced ~/.zshrc)"; fi
 fi
 
+# ---------------------------------------------------------------------------
+# The OS underneath the toolkit. bootstrap.sh deliberately never runs
+# `apt-get upgrade`, so this is the only place that says the box is behind.
+if want 00 'have apt-get'; then
+  section "OS state (00)"
+
+  # Ubuntu's desktop install enables unattended-upgrades, so this is detection,
+  # not prevention. Follows check_foreign_i386: report it and print the command,
+  # never change it. 20auto-upgrades is the actual switch and is readable
+  # without systemd, which `systemctl is-enabled` is not in a container.
+  au=/etc/apt/apt.conf.d/20auto-upgrades
+  if [ -f "$au" ] && grep -qs '^[^/]*APT::Periodic::Unattended-Upgrade[[:space:]]*"1"' "$au"; then
+    warn "unattended-upgrades is enabled — this box can change itself mid-engagement"
+    warn "  (an nginx ABI bump uninstalls the headers-more filter; a python3 point"
+    warn "   release invalidates every pipx venv). Turn it off with:"
+    warn "    sudo systemctl disable --now unattended-upgrades"
+    warn "    sudo dpkg-reconfigure -plow unattended-upgrades"
+  else
+    pass "unattended-upgrades is not enabled"
+  fi
+
+  # Informational only, and honest about why: this reads the LOCAL apt index, so
+  # it means nothing without a preceding `sudo apt-get update`. `apt`, not
+  # `apt-get` — only the former has `list --upgradable`.
+  if ! have apt; then
+    skip "apt absent — upgradable count not read"
+  else
+    n="$(count_lines 'upgradable from' <(apt list --upgradable 2>/dev/null))"
+    if [ "$n" -gt 0 ]; then
+      note "$n apt package(s) upgradable against the local index. Refresh it with"
+      note "  sudo apt-get update, then upgrade by hand — bootstrap.sh never does."
+    else
+      note "nothing upgradable against the local index (true only if apt-get update is recent)"
+    fi
+  fi
+fi
+
 # Each manifest is checked only when the module that installs it ran. Gating
 # them all behind module 00 asserted every AD/web/cloud/RE tool on a box that
 # had only run 00 07 10 90 95 99, which is 45 failures that mean nothing.
 # The mapping is the module table in docs/README.md.
+
+# Presence AND version: a box running impacket 0.12 against a manifest pinning
+# 0.13.1 used to report fully green, because only the name was ever compared.
 check_pipx() {  # check_pipx <manifest>
-  local m="tools.d/$1" installed name
+  local m="tools.d/$1" short name rest spec have_v
   [ -f "$m" ] || return 0
   have pipx || { skip "pipx absent — $1 not checked"; return 0; }
-  installed="$(pipx list --short 2>/dev/null | awk '{print $1}')"
-  while read -r name _; do
+  short="$(pipx_short)"
+  while read -r name rest; do
     [ -n "$name" ] || continue
-    if printf '%s\n' "$installed" | grep -qix "$name"; then pass "pipx: $name"
-    else fail "pipx: $name not installed (from $m)"; fi
+    have_v="$(pipx_version "$name" "$short")"
+    [ -n "$have_v" ] || { fail "pipx: $name not installed (from $m)"; continue; }
+    spec="$(pipx_strip_python "$rest")"
+    case "$spec" in
+      # A git+ pin is a ref, not a version, and `pipx list` reports the package
+      # version instead — so compare against the spec pipx recorded.
+      git+*) drift "pipx $name" "$m" "$spec" "$(pipx_source "$name")" ;;
+      *==*)  drift "pipx $name" "$m" "${spec##*==}" "$have_v" ;;
+      # check.sh already complains about an unpinned manifest line; do not
+      # duplicate that here, just say what the box is carrying.
+      *)     note "pipx $name: $m carries no pin (box has $have_v)" ;;
+    esac
   done < <(rl "$m")
 }
 
-# go install drops binaries in ~/go/bin named for the last path segment, after
-# stripping the @version and any /vN module-major suffix.
+# The manifest pins module@version; go_bin (tests/lib.sh) derives the binary
+# name that `go install` actually wrote into ~/go/bin.
 check_go() {  # check_go <manifest>
-  local m="tools.d/$1" spec p b
+  local m="tools.d/$1" spec b cmp=1
   [ -f "$m" ] || return 0
+  have go || { note "go absent — $1 checked for presence only"; cmp=0; }
   while read -r spec; do
     [ -n "$spec" ] || continue
-    p="${spec%@*}"; p="${p%/v[0-9]}"; b="${p##*/}"
-    [ -x "$HOME/go/bin/$b" ] && pass "go: $b" || fail "go: $HOME/go/bin/$b missing (from $spec)"
+    b="$(go_bin "${spec%@*}")"
+    [ -x "$HOME/go/bin/$b" ] || { fail "go: $HOME/go/bin/$b missing (from $spec)"; continue; }
+    if [ "$cmp" -eq 1 ]; then drift "go $b" "$m" "${spec##*@}" "$(go_version "$b")"
+    else pass "go: $b"; fi
   done < <(rl "$m")
 }
 
