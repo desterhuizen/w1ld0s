@@ -177,7 +177,11 @@ pipx_tool() {  # pipx_tool <name> [pip-spec] [python-x.y]
     extra=(--python "python$pyver")
   fi
   if pipx list 2>/dev/null | grep -qiE "package $name "; then
-    log "pipx: $name present (upgrade later with: pipx upgrade $name)"
+    # NOT "pipx upgrade $name": under a ==-pinned manifest that goes to latest
+    # and silently breaks the pin this list exists to hold. The presence check
+    # above is by bare name, so a bumped pin is a no-op here — it lands on the
+    # next VM. tests/verify-box.sh reports the gap between the two.
+    log "pipx: $name present (bump the pin in tools.d/*.pipx; it applies on a rebuild)"
   else
     log "pipx: install $spec${pyver:+ (on python$pyver)}"
     pipx install "${extra[@]}" "$spec" || warn "pipx: failed to install $spec"

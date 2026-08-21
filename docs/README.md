@@ -41,7 +41,8 @@ assets/branding/      w1ld0s.png (logo + wallpaper), w1ld0s-grub.png (1920x1080
                       GRUB background), w1ld0s-splash.png (Plymouth watermark)
 docs/                 this file, the AD collection cheatsheet, the Debian port note
 tests/                check.sh (static, per push), verify-box.sh (on a real box),
-                      box-state.sh (idempotence digest), Dockerfile + check-docker.sh
+                      box-state.sh (idempotence digest), freeze-pins.sh (installed
+                      versions in manifest shape), Dockerfile + check-docker.sh
 ```
 
 Paths set in `lib/common.sh`: `OPT_DIR=/opt/w1ld0s`, `VENV_DIR=$OPT_DIR/venvs`, `TOOLS_DIR=$OPT_DIR/tools`, `WORDLISTS_DIR=$OPT_DIR/wordlists`, `BIN_DIR=~/.local/bin`, `REPOS_DIR=~/tools/repos`, `BINARIES_DIR=~/tools/binaries`.
@@ -136,6 +137,58 @@ Session settings need a live D-Bus session bus, which `bootstrap.sh` usually doe
 7. Log out and pick your session at the greeter (GNOME or i3 — both are listed), open a new zsh, `hash -r`. If the desktop came up unbranded, run `w1ld0s-wallpaper` and `w1ld0s-gnome` from inside the session.
 8. **Snapshot the VM as `clean-base`.**
 
+## Updating a box
+
+There is no update command, and that is the design: the box you rebuild from a
+bumped manifest is reproducible, the box you mutate in place is not. What
+follows is what actually moves, so nobody has to guess.
+
+**Rebuild from bumped manifests — the supported path.** Every `.pipx` and
+`.gh` pin, the gems, `GO_VERSION`, and every tool behind a module presence
+guard (Ghidra, jadx, apktool, Burp, feroxbuster, trufflehog, `aws`, `kubectl`,
+hcxtools) takes effect on a **fresh VM only**. On a live box the guards are all
+true, so a bumped pin is a no-op — `pipx_tool` compares the bare package name
+and `gh_release` returns on `[ -e "$dest" ]` before the tag is read. Bump the
+manifest, build a new VM, verify, snapshot, discard the old one.
+
+**Moves on its own, on every run.** Every `clone_or_pull` checkout — sqlmap,
+whatweb, joomscan, Responder, dex2jar, the toolkit — tracks its default branch
+and fast-forwards. That is deliberate for tools whose value is a signature or
+plugin corpus. `go install` re-runs unconditionally and so converges to the
+`.go` pin. `apt_install` resolves to the archive candidate, which is also how
+the apt-repo-backed `az` and `gcloud` stay current. `nuclei -update-templates`
+runs every time module 30 does.
+
+**Not done at all: OS package upgrades.** `bootstrap.sh` never runs `apt-get
+upgrade`, deliberately — a pentest box that changes underneath an engagement is
+a hazard, not a convenience. Patch it yourself between engagements:
+
+```bash
+sudo apt-get update && sudo apt-get upgrade
+```
+
+Never `dist-upgrade` or `full-upgrade`: both are permitted to **remove**
+packages to satisfy a new dependency set, which is exactly what `--no-remove`
+exists to prevent (see the `gcc-multilib:i386` note at `lib/common.sh:116-121`).
+`unattended-upgrades` stays off for the same reason — `verify-box.sh` warns if
+it finds it enabled and prints the command to disable it.
+
+**Bumping the pins.** Freezing a green build back into the lockfile is
+mechanical rather than fifty hand-transcriptions:
+
+```bash
+./tests/verify-box.sh -v            # what has drifted from the manifests
+./tests/freeze-pins.sh --diff       # exactly which pins the box disagrees with
+./tests/freeze-pins.sh ad.pipx      # review, then paste into tools.d/ad.pipx
+git diff tools.d/                   # the lockfile change, reviewable
+./tests/check-docker.sh --strict    # grammar and pinning rules still hold
+```
+
+`freeze-pins.sh` is a line-preserving transform, not a generator: comments,
+ordering and column alignment survive, so only the version tokens move. It
+prints and never writes — do **not** redirect it over its own input, which
+truncates the file before it is read.
+
 ## Checks
 
 Three tiers, deliberately unequal in what they can prove.
@@ -144,12 +197,13 @@ Three tiers, deliberately unequal in what they can prove.
 |---|---|---|
 | Static | `tests/check.sh` — manifest shape and pinning, https-only clone URLs, `ALL_MODULES` vs the filesystem vs this file, the transitive-`die` trap, `.gitignore` integrity, secret patterns, shellcheck | Every push; seconds |
 | Container | `.github/workflows/smoke.yml` — runs `./bootstrap.sh` twice in `ubuntu:26.04` and asserts the second run changes nothing; also `nginx -t` and `i3 -C` against the shipped configs | Every PR into `main`; weekly; on demand |
-| Box | `tests/verify-box.sh` — see [Verification](#verification) | By hand, after a real install |
+| Box | `tests/verify-box.sh` — presence, box state, and **drift between the manifest pins and the installed versions**; see [Verification](#verification) | By hand, after a real install |
 
 ```bash
 ./tests/check.sh              # from a Linux box or the CI runner
 ./tests/check-docker.sh       # from anywhere Docker runs, including macOS
 ./tests/check.sh --strict     # warnings become failures
+./tests/freeze-pins.sh --diff # on a box: which pins no longer match it
 ```
 
 `check.sh` targets Linux, bash 5 and GNU userland on purpose — it is not macOS
@@ -180,6 +234,18 @@ w1ld0s block, bash-identical `LS_COLORS`, a clean `zsh -ic` startup, the webserv
 header suppression and bodyless 404, Plymouth's `ImageDir`, the GRUB keys, the
 recompiled greeter database, and the Ptyxis palette keyfile — and then prints the
 short list of things that still need a human eye.
+
+It also compares the **installed version** of every `.pipx` and `.go` entry against
+the pin in the manifest, which presence alone never caught: a box running impacket
+0.12 against a manifest pinning 0.13.1 used to report fully green. A mismatch is a
+`warn`, not a `fail` — the tool works; what has stopped being true is that the
+manifests are the lockfile, so the next VM built from this commit will not be this
+box. `--strict` promotes it if you want a hard gate. **Expect a real box to go amber
+here as upstream moves**; that is the check doing its job, not something to fix by
+demoting the warnings. Resolve it in whichever direction is right: bump the pin and
+rebuild, or run `./tests/freeze-pins.sh` to move the manifest onto what the box has
+proved. A `git+` pin is compared against the spec pipx recorded at install time
+(`pipx_metadata.json`), since `pipx list` reports a package version rather than a ref.
 
 Run it **inside a desktop session** if you want the GNOME group checked: `gsettings`
 returns empty over SSH, so the script skips that group with a note rather than
@@ -223,10 +289,30 @@ As of the aarch64 build of 2026-08-15 everything below is pinned:
 - Gems pin with `-v` (`evil-winrm 3.9`, `wpscan 4.1.0`, `addressable 2.9.0`); `GO_VERSION` in `modules/00-base.sh`.
 - Git checkouts (sqlmap, joomscan, whatweb, Responder, …) are the exception: `clone_or_pull` tracks the default branch and fast-forwards on every run. That is deliberate for tools whose value is a signature/plugin corpus, but it does mean those are the parts of the box a re-run can change.
 
-To unpin a single tool, replace its version with `@latest` / drop the `==`, re-run that module, and freeze the new version back.
+**A bumped pin lands on the next VM, not on the box you are sitting at.** Only the
+`.go` manifests behave otherwise, because `go_install_list` has no presence check and
+re-runs `go install` every time. For `.pipx`, `gh_release` and every tool behind a
+module guard, editing the manifest and re-running the module changes nothing — see
+[Updating a box](#updating-a-box).
+
+So the loop is: build, verify, freeze, rebuild.
+
+```bash
+./tests/freeze-pins.sh --diff       # which pins this box disagrees with
+./tests/freeze-pins.sh ad.pipx      # review, then paste into tools.d/ad.pipx
+git diff tools.d/                   # commit the lockfile change with the build that proved it
+```
+
+To move a single tool forward deliberately, bump its pin, provision a fresh VM, and
+freeze back whatever came out green.
 
 ## Known gaps
 
+- **`releases.gh` tags are not drift-checked.** `gh_release` writes the asset and keeps no record of which tag produced it, so nothing on the box can answer "is this feroxbuster the pinned one?" Fixing it means a provenance sidecar written next to each `$dest` after a successful download; until then `freeze-pins.sh` skips `.gh` and `verify-box.sh` checks those rows for presence only.
+- **Pins that live in module source are not drift-checked either** — the gems (`evil-winrm 3.9`, `wpscan 4.1.0`, `addressable 2.9.0`), `GO_VERSION`, and the inline `gh_release` tags in modules 30/40/50/60. Only pins in `tools.d/*` are compared, because that is where a manifest can be read without grepping shell source.
+- **feroxbuster, trufflehog and RunasCs are pinned in two places** — `tools.d/releases.gh` and inline in modules 30/40/60 — so bumping either one alone leaves the two disagreeing.
+- Git-cloned tools (sqlmap, whatweb, Responder, dex2jar, …) drift on every run by design and cannot be drift-checked: `clone_or_pull` tracks a branch, and there is no ref to compare against.
+- `have evil-winrm` in `modules/20-ad-network.sh` is false during bootstrap — the gem bin dir is only appended to `~/.zshrc`, never exported into the running shell — so that `gem install` re-runs on every bootstrap. It exits 0 reporting the gem is already installed, so it costs seconds rather than correctness. Same shape for `wpscan` in module 30.
 - `assets/zshrc` is imported but no module installs it — `modules/00-base.sh` appends its own block to whatever `~/.zshrc` oh-my-zsh creates, and that block already sources the toolkit aliases. The asset now duplicates the block rather than contradicting it, but it is still dead: either wire it up with `install_asset zshrc "$HOME/.zshrc"` (before the block is appended) or drop it.
 - `assets/i3/i3-workspace-1.json` is an i3 layout dump that nothing restores. Wire it into the i3 config with `append_layout` if you want it.
 - Burp's unattended install depends on PortSwigger's download endpoint not requiring a browser; it warns and points at a manual installer if that fails. The installer is arch-selected (`type=Linux` is x86_64-only, `type=LinuxArm64` for aarch64).
