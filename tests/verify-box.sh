@@ -56,6 +56,43 @@ if want 00 'have pipx'; then
   else warn "\$ROCKYOU unset (run from an interactive shell that sourced ~/.zshrc)"; fi
 fi
 
+# ---------------------------------------------------------------------------
+# The OS underneath the toolkit. bootstrap.sh deliberately never runs
+# `apt-get upgrade`, so this is the only place that says the box is behind.
+if want 00 'have apt-get'; then
+  section "OS state (00)"
+
+  # Ubuntu's desktop install enables unattended-upgrades, so this is detection,
+  # not prevention. Follows check_foreign_i386: report it and print the command,
+  # never change it. 20auto-upgrades is the actual switch and is readable
+  # without systemd, which `systemctl is-enabled` is not in a container.
+  au=/etc/apt/apt.conf.d/20auto-upgrades
+  if [ -f "$au" ] && grep -qs '^[^/]*APT::Periodic::Unattended-Upgrade[[:space:]]*"1"' "$au"; then
+    warn "unattended-upgrades is enabled — this box can change itself mid-engagement"
+    warn "  (an nginx ABI bump uninstalls the headers-more filter; a python3 point"
+    warn "   release invalidates every pipx venv). Turn it off with:"
+    warn "    sudo systemctl disable --now unattended-upgrades"
+    warn "    sudo dpkg-reconfigure -plow unattended-upgrades"
+  else
+    pass "unattended-upgrades is not enabled"
+  fi
+
+  # Informational only, and honest about why: this reads the LOCAL apt index, so
+  # it means nothing without a preceding `sudo apt-get update`. `apt`, not
+  # `apt-get` — only the former has `list --upgradable`.
+  if ! have apt; then
+    skip "apt absent — upgradable count not read"
+  else
+    n="$(count_lines 'upgradable from' <(apt list --upgradable 2>/dev/null))"
+    if [ "$n" -gt 0 ]; then
+      note "$n apt package(s) upgradable against the local index. Refresh it with"
+      note "  sudo apt-get update, then upgrade by hand — bootstrap.sh never does."
+    else
+      note "nothing upgradable against the local index (true only if apt-get update is recent)"
+    fi
+  fi
+fi
+
 # Each manifest is checked only when the module that installs it ran. Gating
 # them all behind module 00 asserted every AD/web/cloud/RE tool on a box that
 # had only run 00 07 10 90 95 99, which is 45 failures that mean nothing.
