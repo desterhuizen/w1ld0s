@@ -197,7 +197,7 @@ Three tiers, deliberately unequal in what they can prove.
 |---|---|---|
 | Static | `tests/check.sh` — manifest shape and pinning, https-only clone URLs, `ALL_MODULES` vs the filesystem vs this file, the transitive-`die` trap, `.gitignore` integrity, secret patterns, shellcheck | Every push; seconds |
 | Container | `.github/workflows/smoke.yml` — runs `./bootstrap.sh` twice in `ubuntu:26.04` and asserts the second run changes nothing; also `nginx -t` and `i3 -C` against the shipped configs | Every PR into `main`; weekly; on demand |
-| Box | `tests/verify-box.sh` — presence, box state, and **drift between the manifest pins and the installed versions**; see [Verification](#verification) | By hand, after a real install |
+| Box | `tests/verify-box.sh` — presence, box state, **drift between the manifest pins and the installed versions**, and that every pipx tool still imports; see [Verification](#verification) | By hand, after a real install |
 
 ```bash
 ./tests/check.sh              # from a Linux box or the CI runner
@@ -229,11 +229,23 @@ Run the verifier on the box, after `./bootstrap.sh` and a reboot:
 ```
 
 It asserts everything that can be asserted from a shell — every `.pipx`, `.go` and
-`releases.gh` tool actually present, zsh as the login shell, exactly one `~/.zshrc`
+`releases.gh` tool actually present **and every pipx tool actually able to run**,
+zsh as the login shell, exactly one `~/.zshrc`
 w1ld0s block, bash-identical `LS_COLORS`, a clean `zsh -ic` startup, the webserver's
 header suppression and bodyless 404, Plymouth's `ImageDir`, the GRUB keys, the
 recompiled greeter database, and the Ptyxis palette keyfile — and then prints the
 short list of things that still need a human eye.
+
+The run check is worth explaining, because it is cheap and catches the thing that
+has actually bitten this repo. Every pipx package is run once — `pipx list --json`
+says which console script each one installed, so nothing has to guess that
+`netexec` ships `nxc` or that impacket ships seventy scripts under their own names
+— and the assertion is that the output carries no `Traceback`, `ModuleNotFoundError`
+or `ImportError`. Not that it exits 0: argparse-style CLIs disagree about what
+`--help` should exit with, while a venv broken by an interpreter bump is
+unambiguous. That is exactly how donpapi, wfuzz and ropper died — all three
+installed cleanly and failed on first import. Go binaries are deliberately not
+covered: a binary that execs at all has no import step to fail.
 
 It also compares the **installed version** of every `.pipx` and `.go` entry against
 the pin in the manifest, which presence alone never caught: a box running impacket
