@@ -42,7 +42,8 @@ assets/branding/      w1ld0s.png (logo + wallpaper), w1ld0s-grub.png (1920x1080
 docs/                 this file, the AD collection cheatsheet, the Debian port note
 tests/                check.sh (static, per push), verify-box.sh (on a real box),
                       box-state.sh (idempotence digest), freeze-pins.sh (installed
-                      versions in manifest shape), Dockerfile + check-docker.sh
+                      versions in manifest shape), scan-lab.sh (real scans against
+                      the lab), lab/ (its fixtures), Dockerfile + check-docker.sh
 ```
 
 Paths set in `lib/common.sh`: `OPT_DIR=/opt/w1ld0s`, `VENV_DIR=$OPT_DIR/venvs`, `TOOLS_DIR=$OPT_DIR/tools`, `WORDLISTS_DIR=$OPT_DIR/wordlists`, `BIN_DIR=~/.local/bin`, `REPOS_DIR=~/tools/repos`, `BINARIES_DIR=~/tools/binaries`.
@@ -191,19 +192,21 @@ truncates the file before it is read.
 
 ## Checks
 
-Three tiers, deliberately unequal in what they can prove.
+Four tiers, deliberately unequal in what they can prove.
 
 | Tier | What | When |
 |---|---|---|
 | Static | `tests/check.sh` — manifest shape and pinning, https-only clone URLs, `ALL_MODULES` vs the filesystem vs this file, the transitive-`die` trap, `.gitignore` integrity, secret patterns, shellcheck | Every push; seconds |
 | Container | `.github/workflows/smoke.yml` — runs `./bootstrap.sh` twice in `ubuntu:26.04` and asserts the second run changes nothing; also `nginx -t` and `i3 -C` against the shipped configs | Every PR into `main`; weekly; on demand |
 | Box | `tests/verify-box.sh` — presence, box state, **drift between the manifest pins and the installed versions**, and that every pipx tool still imports; see [Verification](#verification) | By hand, after a real install |
+| Scan | `tests/scan-lab.sh` — real scans against two throwaway Docker targets, asserting that nmap, httpx, ffuf, whatweb, nuclei, ldapsearch, smbclient, netexec, smbmap and enum4linux-ng each still report the facts they should; see [Scan lab](#scan-lab) | By hand, after upgrading a tool; needs Docker on your workstation; ~5 min |
 
 ```bash
 ./tests/check.sh              # from a Linux box or the CI runner
 ./tests/check-docker.sh       # from anywhere Docker runs, including macOS
 ./tests/check.sh --strict     # warnings become failures
 ./tests/freeze-pins.sh --diff # on a box: which pins no longer match it
+./tests/scan-lab.sh -v        # on a box, with the lab up on your workstation
 ```
 
 `check.sh` targets Linux, bash 5 and GNU userland on purpose — it is not macOS
@@ -213,9 +216,14 @@ image CI uses, so "it passed locally" and "it passed in CI" mean the same thing.
 **What none of this catches.** Anything you have to look at: GRUB, Plymouth, the LUKS
 prompt, the greeter, the dock, wallpapers, fonts. Anything needing systemd or hardware
 — nginx surviving a reboot, `vmtoolsd`, wireless, SDR, Bluetooth, the VMware share.
-Whether a tool *works* rather than merely *installs*: CI can see that `netexec` got a
-venv, not that it authenticates against a signing-enforced DC. And whether a pinned
-version is the *right* version. A green badge means the repo is consistent and a
+Whether a tool *works* rather than merely *installs* — partly closed now, and worth
+being precise about what by. `verify-box.sh` runs every pipx tool and fails if it
+tracebacks, which is the failure that killed donpapi, wfuzz and ropper: all three
+installed cleanly and died on first import. `scan-lab.sh` goes further and proves
+`netexec` really authenticates and enumerates shares against a live domain controller
+over both SMB and LDAP. Neither touches Kerberos against a *Windows* DC, ADCS, signing
+enforcement, LAPS or gMSA — the lab is Samba, and Samba is not Windows. And neither can
+tell you whether a pinned version is the *right* version. A green badge means the repo is consistent and a
 container provisioned — never that the box boots branded and working.
 
 ## Verification
@@ -288,6 +296,85 @@ marker counts, the login shell, the `~/.local/bin` symlink set with targets, and
 fast-forwards every checkout on every run by design, so a tree diff would always be
 noisy and would prove nothing.
 
+## Scan lab
+
+`tests/verify-box.sh` can tell you a tool is installed and imports. It cannot tell
+you the tool still returns the right answer. `tests/scan-lab.sh` closes that: it
+points ten tools at two throwaway Docker containers whose answers are known in
+advance, and asserts a handful of specific facts from each.
+
+The lab runs on **your workstation, not the box** — the box is normally a guest
+VM, and nesting Docker inside it would make Docker a provisioning prerequisite
+for no benefit. The stack publishes ports on the host and the guest scans back to
+the host's address on the hypervisor network. Full setup, including how to find
+that address for each hypervisor, is in [`tests/lab/README.md`](../tests/lab/README.md).
+
+```sh
+docker compose -f tests/lab/compose.yml up -d   # on the workstation
+```
+```bash
+echo 192.168.x.1 > tests/lab/target             # on the box, once per VM
+./tests/scan-lab.sh -v
+./tests/scan-lab.sh nxc ffuf                    # just these, while iterating
+```
+
+| Target | Image | Asserted by |
+|---|---|---|
+| DVWA (Apache/PHP/MariaDB) | `ghcr.io/digininja/dvwa` | nmap, httpx, ffuf, whatweb, nuclei |
+| Samba 4.24.6 as an AD DC | `diegogslomp/samba-ad-dc` | nmap, ldapsearch, smbclient, netexec, smbmap, ldapdomaindump, kerbrute, impacket, enum4linux-ng |
+
+Both images are pinned by **digest**, not tag: neither upstream publishes a stable
+semantic version, and a fixture whose surface moves cannot answer "did my upgrade
+break this". The digest is the lockfile, the same discipline `tools.d/` uses.
+
+The rule every assertion follows is **anchor on tokens the fixture supplies, never
+on tokens the tool supplies** — `DC1`, `login.php`, `lab.w1ld0s.local`, never a
+version string or a column position. Two consequences worth knowing:
+
+- **nuclei is asserted structurally** — that its corpus loaded and it exited
+  cleanly, not that any particular template fired. The corpus updates
+  independently of the pinned binary, so any finding-level assertion would rot
+  within weeks. What actually breaks on a nuclei upgrade is the corpus failing to
+  parse, and that is what the assertion catches. It skips entirely if no corpus
+  is on disk, because `-duc` makes nuclei hard-fail without one.
+- **Negative assertions carry real weight.** ffuf must *not* report the two paths
+  that do not exist, kerbrute must report exactly 1 of 3 usernames valid, and nmap
+  must not call port 64999 open. A scanner that reports everything passes every
+  positive test ever written.
+
+The preflight is deliberately fussy about the difference between *something is
+listening* and *the fixture is listening*, because the target is now your own
+workstation. No target configured, or nothing on the port, is a `skip` and exit 0 —
+an absent lab is not a broken tool. Something answering on :80 that is not DVWA is
+a single `FAIL` naming that fact, rather than five tool failures that blame the
+tools.
+
+### Before and after an upgrade
+
+```bash
+./tests/scan-lab.sh -v | tee ~/before.txt
+$EDITOR tools.d/web.go && ./bootstrap.sh 30
+./tests/scan-lab.sh -v | tee ~/after.txt
+diff -u <(grep -v '^\[note\]' ~/before.txt) <(grep -v '^\[note\]' ~/after.txt)
+```
+
+Two runs against an unchanged box differ by exactly one line — the `[note]` giving
+the timestamped transcript directory — which is why the diff drops the note lines.
+Everything else, including the nuclei finding count, is stable.
+
+A regression prints the tool, the fact and the transcript path, and exits non-zero,
+so the second run answers the question on its own. `diff -ru` between the two
+transcript directories under `~/.local/tmp/w1ld0s-scan-lab/` answers the follow-up
+question of *what* changed.
+
+One caveat that decides how you run this: **a bumped `.pipx` or `.gh` pin is a
+no-op on an already-provisioned box.** `pipx_tool` matches by bare name and
+`gh_release` returns on `[ -e "$dest" ]` before the tag is read, so re-running the
+module changes nothing and the two scans will agree. `.go` pins *do* re-fetch.
+For pipx and release pins the honest before/after needs a fresh VM — which is why
+this belongs next to `verify-box.sh` in the first-run procedure rather than as a
+separate ritual you have to remember.
+
 ## Pinning
 
 The first build runs unpinned to get a working VM fast. Once it's green and snapshotted, the versions that worked are frozen back into the manifests — **the manifests are the lockfile**, and `.gitignore` force-tracks them with `!tools.d/*`. A local-only pin would defeat the purpose, which is that the *next* VM rebuilds identically.
@@ -335,6 +422,10 @@ freeze back whatever came out green.
 - Module 07 restyles GDM through the supported dconf drop-in only. The greeter's *widget* theme (panel colours, entry fields) comes from `gdm-theme.gresource`, which `update-alternatives` resolves to Yaru at priority 15 — note that overwriting `/usr/share/gnome-shell/gnome-shell-theme.gresource`, the fix most guides give, is silently shadowed by that and does nothing.
 - The two terminals are styled twice from one set of colours: `assets/terminator/config` holds them as a palette string, `assets/ptyxis/w1ld0s.palette` as a keyfile. Change one and the other drifts — there is no shared source.
 - `tools.d/gnome.folder` lists a few tools nothing installs yet (wireshark, zaproxy are deliberately absent). Entries with no `.desktop` file are filtered out at apply time, so the list is safe to share across builds.
+- **The scan lab needs Docker, which no module installs.** That is deliberate — it runs on your workstation, not the box — but it does mean `scan-lab.sh` is the one tier that cannot run unattended anywhere. It skips cleanly and exits 0 when `tests/lab/target` is absent.
+- **The lab is Samba, and Samba is not Windows.** There is no ADCS role, so `certipy` cannot be exercised at all; there is no LAPS, no gMSA, and none of the Windows-specific quirks that AD tooling actually trips over. [GOAD](https://github.com/Orange-Cyberdefense/GOAD) is the real answer for that depth, but it is Vagrant plus real Windows VMs — 20GB of RAM for GOAD-Light and around 115GB of disk — so nothing here is built for it. If you do stand it up, put its DC's address in `tests/lab/target` and the AD half of `scan-lab.sh` will run against it unchanged.
+- **NetBIOS name service (137/udp) is not published by the lab**, because macOS runs `netbiosd` on that port and the bind fails outright. `enum4linux-ng` loses its "NetBIOS Names and Workgroup" section as a result; its SMB-session and RPC sections still answer, and those are what the assertions use.
+- **`masscan` is excluded from the scan lab** because it needs raw sockets, and a `sudo` prompt in the middle of an otherwise unattended run is worse than the coverage is worth.
 - Whether to clone the large legacy `/mnt/hacking/tools/` kit or leave it on the mount is still undecided.
 
 ## License

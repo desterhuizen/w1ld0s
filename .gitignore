@@ -60,6 +60,13 @@ CLAUDE.local.md
 !tools.d/*
 !assets/**
 
+# --- scan lab target (tests/scan-lab.sh) ------------------------------------
+# The Docker host's address on your hypervisor network. Per-VM and per-operator,
+# and a lab address is not something to publish. Absent by default; the runner
+# skips cleanly without it, the same shape as tools.d/private.git below. No
+# force-track rule matches tests/lab/*, so this one needs no ordering care.
+tests/lab/target
+
 # --- private overlay manifest (module 95) -----------------------------------
 # Clone URLs for repos that can't be public. Absent by default; module 95 is a
 # no-op without it. Must come after the !tools.d/* force-track above: the last

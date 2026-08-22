@@ -35,7 +35,7 @@ starting over.
 | `modules/` | One numbered step per domain — base, desktop, AD, web, cloud, RE, payloads, wireless. |
 | `tools.d/` | Declarative, pinnable manifests. **The manifests are the lockfile.** |
 | `assets/` | Dotfiles and branding copied onto the box verbatim. |
-| `tests/` | `check.sh` (static checks, runs in CI and via Docker), `verify-box.sh` (asserts a provisioned box), `box-state.sh` (idempotence digest). |
+| `tests/` | `check.sh` (static checks, runs in CI and via Docker), `verify-box.sh` (asserts a provisioned box), `box-state.sh` (idempotence digest), `scan-lab.sh` (real scans against a throwaway Docker lab). |
 
 The operator toolkit — engagement state, enumeration wrappers, cheatsheets, and the
 aliases that drive them — lives in a separate repo,
