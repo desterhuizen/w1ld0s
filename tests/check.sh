@@ -267,6 +267,17 @@ while read -r spec; do
   case "$spec" in *@*) pass "inline gh_release pinned: $spec" ;; *) fail "inline gh_release with no @tag: $spec" ;; esac
 done < <(uncomment "${MODULE_FILES[@]}" | grep -oE 'gh_release[[:space:]]+"?[A-Za-z0-9._/-]+/[A-Za-z0-9._-]+[^"[:space:]]*' | awk '{print $2}' | tr -d '"' | sort -u)
 
+# Same reasoning as install_asset above: a fixture that scan-lab.sh names but
+# that is not on disk fails on the box, far from here, as a confusing wall of
+# scan failures. `target` is exempt — it is gitignored and operator-created, and
+# the runner skips cleanly without it, the same shape as tools.d/private.git.
+while read -r f; do
+  [ -n "$f" ] || continue
+  [ "$f" = "target" ] && continue
+  [ -e "tests/lab/$f" ] && pass "lab fixture exists: $f" \
+    || fail "tests/scan-lab.sh references missing tests/lab/$f"
+done < <(uncomment tests/scan-lab.sh | grep -oE '\$LAB/[A-Za-z0-9._/-]+' | sed 's|^\$LAB/||' | sort -u)
+
 # ---------------------------------------------------------------------------
 section "Secrets and gitignore integrity"
 

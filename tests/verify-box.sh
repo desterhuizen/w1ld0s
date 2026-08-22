@@ -137,10 +137,63 @@ check_go() {  # check_go <manifest>
   done < <(rl "$m")
 }
 
-if want 20 'have nxc'; then section "AD and network tools (20)"; check_pipx ad.pipx; fi
-if want 30 'have ffuf'; then section "Web tools (30)"; check_pipx web.pipx; check_go web.go; fi
-if want 40 'have aws'; then section "Cloud tools (40)"; check_pipx cloud.pipx; fi
-if want 50 'have r2'; then section "RE and binary tools (50)"; check_pipx re.pipx; fi
+# pipx records the console scripts each package installed, so ask it rather than
+# guessing that netexec ships nxc or pwntools ships pwn. One "<package>\t<app>"
+# line per venv: an app named after the package if there is one, else the first —
+# impacket alone ships around sixty and any single one proves the venv imports.
+pipx_apps() {
+  have pipx || return 0
+  pipx list --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+for name, meta in (d.get("venvs") or {}).items():
+    apps = ((meta.get("metadata") or {}).get("main_package") or {}).get("apps") or []
+    # Always emit a row, empty second field when the package ships no script:
+    # that is what lets the caller tell "installed but nothing to run" apart
+    # from "not installed at all", which check_pipx has already reported.
+    print(name, next((a for a in apps if a.lower() == name.lower()), apps[0] if apps else ""), sep="\t")
+'
+}
+
+# Assert the tool RUNS, not that it exits 0 — argparse-style CLIs disagree about
+# what --help should exit with, but a broken venv is unambiguous: it tracebacks.
+# This is the class that killed donpapi (lxml vs the 3.14 C API), wfuzz (pycurl
+# vs 3.13) and ropper (ast.Str vs 3.12); all three installed cleanly and failed
+# on first import, which check_pipx cannot see.
+#
+# pipx only, deliberately: a Go binary that execs at all has no import step to
+# fail, and check_go already asserts -x on it.
+smoke_pipx() {  # smoke_pipx <manifest> <pipx_apps-output>
+  local m="tools.d/$1" apps="$2" name b out
+  [ -f "$m" ] || return 0
+  have pipx || return 0
+  while read -r name _; do
+    [ -n "$name" ] || continue
+    b="$(printf '%s\n' "$apps" | awk -F'\t' -v p="$name" 'tolower($1)==tolower(p){print ($2==""?"-":$2); exit}')"
+    # No row at all means the package is not installed, which check_pipx has
+    # already failed on — do not say it twice.
+    [ -n "$b" ] || continue
+    [ "$b" = "-" ] && { note "smoke: $name ships no console script"; continue; }
+    have "$b" || continue
+    out="$(timeout 30 "$b" --help </dev/null 2>&1)"
+    case "$out" in
+      *"Traceback (most recent call last)"*|*ModuleNotFoundError*|*ImportError*)
+        fail "smoke: $b fails to import (from $m)" ;;
+      *) pass "smoke: $b runs" ;;
+    esac
+  done < <(rl "$m")
+}
+
+# Collected once: pipx list --json is slow enough that four calls are noticeable.
+PIPX_APPS="$(pipx_apps)"
+
+if want 20 'have nxc'; then section "AD and network tools (20)"; check_pipx ad.pipx; smoke_pipx ad.pipx "$PIPX_APPS"; fi
+if want 30 'have ffuf'; then section "Web tools (30)"; check_pipx web.pipx; smoke_pipx web.pipx "$PIPX_APPS"; check_go web.go; fi
+if want 40 'have aws'; then section "Cloud tools (40)"; check_pipx cloud.pipx; smoke_pipx cloud.pipx "$PIPX_APPS"; fi
+if want 50 'have r2'; then section "RE and binary tools (50)"; check_pipx re.pipx; smoke_pipx re.pipx "$PIPX_APPS"; fi
 if want 60 'have garble'; then section "Payload dev (60)"; check_go payload.go; fi
 
 if want 80 '[ -d "$HOME/tools/binaries" ]'; then
