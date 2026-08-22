@@ -191,7 +191,19 @@ smoke_pipx() {  # smoke_pipx <manifest> <pipx_apps-output>
 PIPX_APPS="$(pipx_apps)"
 
 if want 20 'have nxc'; then section "AD and network tools (20)"; check_pipx ad.pipx; smoke_pipx ad.pipx "$PIPX_APPS"; fi
-if want 30 'have ffuf'; then section "Web tools (30)"; check_pipx web.pipx; smoke_pipx web.pipx "$PIPX_APPS"; check_go web.go; fi
+if want 30 'have ffuf'; then
+  section "Web tools (30)"
+  check_pipx web.pipx; smoke_pipx web.pipx "$PIPX_APPS"; check_go web.go
+
+  # Module 30 creates this outside its own install guard, so it must be present
+  # even on a box that already had Burp before the link existed.
+  bb=/opt/w1ld0s/BurpSuiteCommunity/BurpSuiteCommunity
+  if [ -x "$bb" ]; then
+    [ "$(readlink -f /usr/local/bin/burpsuite 2>/dev/null)" = "$bb" ] \
+      && pass "/usr/local/bin/burpsuite -> $bb" \
+      || fail "/usr/local/bin/burpsuite does not point at $bb — re-run ./bootstrap.sh 30"
+  else skip "no Burp under /opt/w1ld0s — its installer may have failed"; fi
+fi
 if want 40 'have aws'; then section "Cloud tools (40)"; check_pipx cloud.pipx; smoke_pipx cloud.pipx "$PIPX_APPS"; fi
 if want 50 'have r2'; then section "RE and binary tools (50)"; check_pipx re.pipx; smoke_pipx re.pipx "$PIPX_APPS"; fi
 if want 60 'have garble'; then section "Payload dev (60)"; check_go payload.go; fi

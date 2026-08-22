@@ -86,4 +86,27 @@ if ! have BurpSuiteCommunity && [ ! -d "$OPT_DIR/BurpSuiteCommunity" ]; then
   fi
 fi
 
+# System-wide launcher name, deliberately OUTSIDE the install guard above. That
+# guard short-circuits the moment $OPT_DIR/BurpSuiteCommunity exists, so anything
+# nested inside it only ever lands on the NEXT VM — the same trap the manifest
+# pins have. Kept out here, this also fixes up an already-provisioned box.
+#
+# Not `shim`: that helper writes to $BIN_DIR (~/.local/bin), which is on one
+# user's PATH. /usr/local/bin is the system one, so root, cron and a second
+# account can reach Burp by name. install4j launchers resolve their own install
+# directory, so running through a symlink is fine — the `burp` shim above has
+# always worked the same way.
+BURP_BIN="$OPT_DIR/BurpSuiteCommunity/BurpSuiteCommunity"
+if [ -x "$BURP_BIN" ]; then
+  if [ "$(readlink -f /usr/local/bin/burpsuite 2>/dev/null)" = "$BURP_BIN" ]; then
+    log "/usr/local/bin/burpsuite already points at $BURP_BIN"
+  elif sudo ln -sfn "$BURP_BIN" /usr/local/bin/burpsuite; then
+    ok "burpsuite -> $BURP_BIN (system-wide)"
+  else
+    warn "could not link /usr/local/bin/burpsuite — link by hand: sudo ln -sfn $BURP_BIN /usr/local/bin/burpsuite"
+  fi
+else
+  warn "no Burp at $BURP_BIN — skipping the /usr/local/bin/burpsuite link"
+fi
+
 ok "web toolkit installed."
