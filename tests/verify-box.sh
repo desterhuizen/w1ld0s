@@ -263,6 +263,17 @@ if want 35 'have nginx'; then
 fi
 
 # ---------------------------------------------------------------------------
+if want 05 'have i3'; then
+  section "Desktop and display manager (05)"
+
+  # Module 05 switches unconditionally; gdm3 here means dpkg-reconfigure failed,
+  # and the Wayland-everywhere behaviour that broke Chromium and Burp is back.
+  dm="$(cat /etc/X11/default-display-manager 2>/dev/null || echo unset)"
+  [ "$dm" = "/usr/sbin/lightdm" ] && pass "display manager is lightdm" \
+    || fail "display manager is '$dm' — module 05 sets /usr/sbin/lightdm"
+fi
+
+# ---------------------------------------------------------------------------
 if want 06 '[ -d /usr/share/plymouth/themes/w1ld0s ]'; then
   section "Boot and greeter branding (06)"
 
@@ -276,12 +287,30 @@ if want 06 '[ -d /usr/share/plymouth/themes/w1ld0s ]'; then
     sudo grep -qE '^GRUB_BACKGROUND=' /etc/default/grub && pass "GRUB_BACKGROUND set" || fail "GRUB_BACKGROUND not set"
     sudo grep -qE '^GRUB_TIMEOUT_STYLE=menu' /etc/default/grub && pass "GRUB_TIMEOUT_STYLE=menu" \
       || fail "GRUB_TIMEOUT_STYLE is not menu — the background never draws without it"
-    for db in /var/lib/gdm3/greeter-dconf-defaults /var/lib/gdm/greeter-dconf-defaults; do
-      [ -f "$db" ] || continue
-      sudo strings "$db" 2>/dev/null | grep -q w1ld0s && pass "greeter dconf db carries w1ld0s" \
-        || fail "$db has no w1ld0s entries — was it recompiled?"
-    done
-  else skip "no passwordless sudo — GRUB and greeter DB checks skipped"; fi
+  else skip "no passwordless sudo — GRUB checks skipped"; fi
+
+  # Branch on the active DM the way modules/06 does. This used to look only for
+  # GDM's compiled dconf db and `continue` when it was absent, so on a lightdm
+  # box the group reported green having checked no greeter at all.
+  case "$(basename "$(cat /etc/X11/default-display-manager 2>/dev/null || echo unknown)")" in
+    lightdm)
+      lg=/etc/lightdm/lightdm-gtk-greeter.conf
+      if [ -f "$lg" ]; then
+        grep -q 'greeter-background.png' "$lg" && pass "lightdm greeter conf carries the w1ld0s background" \
+          || fail "$lg has no w1ld0s background — run ./bootstrap.sh 06"
+      else fail "$lg missing — is lightdm-gtk-greeter installed?"; fi
+      ;;
+    gdm3|gdm)
+      if sudo -n true 2>/dev/null; then
+        for db in /var/lib/gdm3/greeter-dconf-defaults /var/lib/gdm/greeter-dconf-defaults; do
+          [ -f "$db" ] || continue
+          sudo strings "$db" 2>/dev/null | grep -q w1ld0s && pass "greeter dconf db carries w1ld0s" \
+            || fail "$db has no w1ld0s entries — was it recompiled?"
+        done
+      else skip "no passwordless sudo — greeter DB check skipped"; fi
+      ;;
+    *) warn "unknown display manager — greeter branding not checked" ;;
+  esac
 fi
 
 # ---------------------------------------------------------------------------
@@ -318,8 +347,9 @@ cat <<'EOF'
       the Plymouth splash shows the watermark, and — on an encrypted root —
       the LUKS passphrase prompt still appears. This is the one place a bug
       is unrecoverable, so never skip it.
-   2. Greeter: branded background, dark styling, w1ld0s banner. Both the
-      GNOME and i3 sessions are listed.
+   2. Greeter: branded background, dark styling, and both the GNOME and i3
+      sessions listed in the picker. The w1ld0s banner is a GDM-only key
+      (org.gnome.login-screen banner-message-text) — lightdm has no banner.
    3. Log into GNOME: dock at the bottom and autohiding, the w1ld0s app
       folder populated, desktop icons gone. Close every Ptyxis window first,
       then reopen — it reads palettes only at startup.

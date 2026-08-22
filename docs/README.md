@@ -60,10 +60,14 @@ Run as your normal user, not root — `lib/common.sh` refuses root and calls `su
 
 ### Desktop: GNOME or i3
 
-Both stacks are installed and they coexist. **i3 is a session you pick at the greeter, not a display manager choice** — gdm3 lists `i3` next to the GNOME session, so nothing needs switching. Ubuntu 26.04 ships no Xorg GNOME session, so removing gdm3 would take GNOME-on-Wayland with it; module 05 therefore leaves the display manager alone by default and module 07 tidies the GNOME shell. To run lightdm instead:
+Both stacks are installed and they coexist. **i3 is a session you pick at the greeter, not a display manager choice** — the greeter lists `i3` next to the GNOME session, and module 07 tidies the GNOME shell either way.
+
+**The display manager is lightdm, not gdm3.** gdm3 gives every session it starts a Wayland environment, and on the staging box that broke Chromium and Burp Suite. The usual counter — `WaylandEnable=false` in `/etc/gdm3/custom.conf` — is dead on Ubuntu 26.04, which ships no Xorg GNOME session and so leaves nothing to log into. lightdm starts an X11 seat and still lists the GNOME Wayland session, which was confirmed to launch, so nothing is lost. Module 05 does the switch through debconf (`dpkg-reconfigure lightdm`), not `systemctl enable` — Ubuntu Desktop owns `/etc/systemd/system/display-manager.service`, so the unit toggle fails with "file already exists" and silently leaves gdm3 in charge.
+
+gdm3 stays **installed but inactive**; purging it takes `ubuntu-desktop` with it. To go back:
 
 ```bash
-W1LD0S_DM=lightdm ./bootstrap.sh 05 06     # 06 then brands lightdm's greeter
+sudo dpkg-reconfigure gdm3 && ./bootstrap.sh 06     # 06 re-brands the GDM greeter
 ```
 
 Session settings need a live D-Bus session bus, which `bootstrap.sh` usually does not have when run from a tty. Modules 05 and 07 therefore generate `w1ld0s-wallpaper` and `w1ld0s-gnome` in `~/.local/bin` and try them once — re-run either from inside your desktop session if it reported nothing applied.
@@ -73,8 +77,8 @@ Session settings need a live D-Bus session bus, which `bootstrap.sh` usually doe
 | Module | What it does |
 | --- | --- |
 | `00-base` | `base.apt`, Go 1.24.5 to `/usr/local/go`, rustup, pipx, oh-my-zsh, **zsh as the login shell** (`sudo chsh`, `usermod` fallback, result checked against `/etc/passwd`), tmux.conf + TPM, the `~/.zshrc` w1ld0s block (PATH, `$EDITOR`, `$ROCKYOU`, bash-identical colours, aliases sourcing), gunzips rockyou in place |
-| `05-desktop-i3` | `desktop.apt`, Brave + VS Code vendor repos, imports i3 config/i3blocks/fonts/terminator, i3blocks-contrib, VMware RDP xmodmap fixes. Leaves the display manager alone unless `W1LD0S_DM=lightdm` (see below) |
-| `06-boot-branding` | GRUB menu background, the Plymouth boot splash and the **login greeter**, all using the w1ld0s logo. Clones Ubuntu's stock `spinner` theme and swaps only the watermark, so the tested LUKS passphrase prompt is preserved. Rewrites `/etc/default/grub` (including `GRUB_TIMEOUT_STYLE=menu`, without which the background never draws) and the initramfs; brands whichever DM is active (gdm3 via `/usr/share/gdm/dconf/95-w1ld0s`, lightdm via its greeter conf) |
+| `05-desktop-i3` | `desktop.apt`, Brave + VS Code vendor repos, imports i3 config/i3blocks/fonts/terminator, i3blocks-contrib, VMware RDP xmodmap fixes. Makes **lightdm** the display manager via debconf, replacing gdm3 (see above) |
+| `06-boot-branding` | GRUB menu background, the Plymouth boot splash and the **login greeter**, all using the w1ld0s logo. Clones Ubuntu's stock `spinner` theme and swaps only the watermark, so the tested LUKS passphrase prompt is preserved. Rewrites `/etc/default/grub` (including `GRUB_TIMEOUT_STYLE=menu`, without which the background never draws) and the initramfs; brands whichever DM is active (normally lightdm, via its greeter conf; gdm3 via `/usr/share/gdm/dconf/95-w1ld0s` if you switched back) |
 | `07-gnome-shell` | GNOME session cleanup from `tools.d/gnome.*`: minimal dock favourites, dock to the bottom and autohiding, CLI/duplicate entries hidden from the app grid, GUI pentest tools grouped into a `w1ld0s` folder, desktop icons and the snap/web search providers disabled. Also styles **Ptyxis** (GNOME's terminal) to match terminator — same gruvbox palette, Fira Code, 0.9 opacity. Generates `w1ld0s-gnome`; no-ops on a box with no GNOME |
 | `10-python-isolation` | Ensures pipx and the shared venv dir; prints and records the isolation policy |
 | `20-ad-network` | `ad.pipx`, kerbrute, Responder, krbrelayx, kerberoast, crowbar, evil-winrm, **BloodHound-CE ingestor in a dedicated venv with sign-capable ldap3** |
@@ -416,6 +420,8 @@ freeze back whatever came out green.
 - `assets/i3/i3-workspace-1.json` is an i3 layout dump that nothing restores. Wire it into the i3 config with `append_layout` if you want it.
 - Burp's unattended install depends on PortSwigger's download endpoint not requiring a browser; it warns and points at a manual installer if that fails. The installer is arch-selected (`type=Linux` is x86_64-only, `type=LinuxArm64` for aarch64).
 - Veil is dropped: its setup needs wine32 + mono, which module 60 already skips as x86_64-only, and it has been unmaintained since 2021. The recipe is kept in `tools.d/kali-longtail.src` for x86_64 boxes.
+- The lightdm greeter is a plain INI at `/etc/lightdm/lightdm-gtk-greeter.conf`, rewritten wholesale by module 06 — a hand-edited one is backed up to `.w1ld0s.bak` once, the same way `install_asset` does. It carries no banner: `banner-message-text` is a GDM key with no lightdm-gtk-greeter equivalent.
+- The next two bullets describe module 06's **gdm3 fallback branch**, which only runs if you switch back to gdm3. The traps are still live, so they are kept.
 - The greeter background uses Ubuntu's `com.ubuntu.login-screen` schema. On a non-Ubuntu GNOME that schema is absent and the greeter keeps its stock background — only the dark styling and banner apply.
 - The greeter sets **no** `org.gnome.login-screen logo`: the background already carries the logo, and GNOME 50 draws that key unscaled — `loginDialog._updateLogoTexture` passes `load_file_async(file, -1, -1, …)` (older shells capped it at 48px) and anchors the image at `(dialog_height - image_height) * 0.96` to match the Plymouth watermark. Ubuntu's watermark is 187x72 and lands at the bottom edge; the 480x480 `w1ld0s-splash.png` covered the password entry. Restoring a logo means shipping a separate ~72px-tall asset, not reusing the splash.
 - nginx is **enabled at boot**, so a fresh boot listens on :80 with an empty webroot (answering a bodyless 404). That is the useful default for payload delivery; turn it off with `sudo systemctl disable --now nginx` if you would rather start it per engagement. The headers-more filter depends on a versioned `nginx-abi-<x.y.z>`, so an nginx ABI bump can leave it briefly uninstallable — module 35 detects that and drops the `more_*` lines rather than letting an unknown directive stop nginx from starting, at the cost of sending `Server: nginx` until the module catches up.

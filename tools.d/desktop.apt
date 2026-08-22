@@ -16,9 +16,10 @@ dunst              # notifications
 libnotify-bin
 
 # --- session / login ---
-# Installed but NOT activated: modules/05 only makes lightdm the display manager
-# when W1LD0S_DM=lightdm. Having the packages here is what keeps that opt-in a
-# one-liner. On a GNOME box gdm3 stays in charge and module 06 brands it instead.
+# lightdm is the display manager: modules/05 switches to it unconditionally,
+# because gdm3 gives every session a Wayland environment and that broke Chromium
+# and Burp. gdm3 is left installed but inactive, and module 06 brands whichever
+# of the two is in charge.
 lightdm
 lightdm-gtk-greeter
 xorg

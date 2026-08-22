@@ -119,30 +119,35 @@ exec_always --no-startup-id xmodmap -e "keycode 21 = section plusminus"
 EOF
 fi
 
-# --- display manager (opt-in) ------------------------------------------------
-# i3 is a SESSION choice, not a DM choice: gdm3 lists /usr/share/xsessions/i3
-# alongside the GNOME session, so the box is fully usable on i3 without touching
-# the display manager at all. We used to switch to lightdm unconditionally, which
-# on a GNOME box is a downgrade — Ubuntu 26.04 ships no Xorg GNOME session, so
-# taking gdm3 out takes GNOME-on-Wayland with it. Opt in instead:
+# --- display manager ---------------------------------------------------------
+# lightdm, not gdm3. gdm3 gives every session it starts a Wayland environment,
+# and on staging that broke the two GUI tools this box exists for: Chromium and
+# Burp Suite both misbehaved. The fix everyone reaches for first — WaylandEnable=false
+# in /etc/gdm3/custom.conf — is dead here, because Ubuntu 26.04 ships no Xorg
+# GNOME session and so leaves nothing to log into. lightdm starts an X11 seat and
+# still lists the GNOME Wayland session, which was confirmed to launch, so the
+# switch costs nothing.
 #
-#   W1LD0S_DM=lightdm ./bootstrap.sh 05
+# gdm3 is left INSTALLED, only inactive: purging it takes ubuntu-desktop with it.
+# To go back: sudo dpkg-reconfigure gdm3
 #
 # Ubuntu Desktop owns /etc/systemd/system/display-manager.service, so a bare
 # `systemctl enable lightdm` fails ("file already exists") and leaves gdm3 in
 # charge anyway. Switching DMs is a debconf question, not a unit toggle.
 DM_FILE=/etc/X11/default-display-manager
-if [ "${W1LD0S_DM:-}" = "lightdm" ]; then
-  if [ "$(cat "$DM_FILE" 2>/dev/null)" != "/usr/sbin/lightdm" ] && have lightdm; then
-    log "W1LD0S_DM=lightdm — making lightdm the display manager (currently: $(basename "$(cat "$DM_FILE" 2>/dev/null || echo none)"))…"
-    echo "lightdm shared/default-x-display-manager select lightdm" | sudo debconf-set-selections 2>/dev/null
-    sudo DEBIAN_FRONTEND=noninteractive dpkg-reconfigure lightdm >/dev/null 2>&1 \
-      || warn "dpkg-reconfigure lightdm failed — switch by hand: sudo dpkg-reconfigure lightdm"
-  fi
+# -x on the absolute path, not `have lightdm`: this is the path written into
+# DM_FILE, and it does not depend on /usr/sbin being on a non-root PATH.
+if [ ! -x /usr/sbin/lightdm ]; then
+  warn "lightdm not installed — display manager left alone. Re-run after fixing desktop.apt."
+elif [ "$(cat "$DM_FILE" 2>/dev/null)" != "/usr/sbin/lightdm" ]; then
+  log "Making lightdm the display manager (currently: $(basename "$(cat "$DM_FILE" 2>/dev/null || echo none)"))…"
+  echo "lightdm shared/default-x-display-manager select lightdm" | sudo debconf-set-selections 2>/dev/null
+  sudo DEBIAN_FRONTEND=noninteractive dpkg-reconfigure lightdm >/dev/null 2>&1 \
+    || warn "dpkg-reconfigure lightdm failed — switch by hand: sudo dpkg-reconfigure lightdm"
 fi
 ACTIVE_DM="$(basename "$(cat "$DM_FILE" 2>/dev/null || echo unknown)")"
+[ "$ACTIVE_DM" = "lightdm" ] || warn "display manager is '$ACTIVE_DM', expected lightdm"
 sudo systemctl enable --now vmtoolsd >/dev/null 2>&1 || true
 
 # Module 06 brands whichever DM is in charge here, so say which one that is.
 ok "i3 desktop ready. Pick the i3 session at the $ACTIVE_DM login screen (log out first)."
-[ "${W1LD0S_DM:-}" = "lightdm" ] || log "display manager left as '$ACTIVE_DM' — set W1LD0S_DM=lightdm to switch."
