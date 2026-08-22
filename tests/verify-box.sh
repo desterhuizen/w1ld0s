@@ -22,6 +22,17 @@ cd "$ROOT" || exit 1
 rl() { sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^[[:space:]]*$/d' "$1"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# A version mismatch is a WARN, not a FAIL. The tool works; what has stopped
+# being true is that the manifests are the lockfile — the next VM built from
+# this commit will not be this box. fail stays reserved for "not installed".
+# Fix it either way round: bump the pin and rebuild, or ./tests/freeze-pins.sh
+# to move the manifest onto what this box proved.
+drift() {  # drift <what> <manifest> <pinned> <installed>
+  if   [ -z "$4" ];     then warn "$1: installed version unknown (cannot compare with $3)"
+  elif [ "$3" = "$4" ]; then pass "$1 $4 matches $2"
+  else                       warn "$1: box has $4, $2 pins $3"; fi
+}
+
 # A group runs if it was named on the command line, or — when nothing was
 # named — if the box carries evidence that its module ran. Someone who ran
 # `./bootstrap.sh 00 10 90` must get skips for branding, not failures.
@@ -45,38 +56,156 @@ if want 00 'have pipx'; then
   else warn "\$ROCKYOU unset (run from an interactive shell that sourced ~/.zshrc)"; fi
 fi
 
+# ---------------------------------------------------------------------------
+# The OS underneath the toolkit. bootstrap.sh deliberately never runs
+# `apt-get upgrade`, so this is the only place that says the box is behind.
+if want 00 'have apt-get'; then
+  section "OS state (00)"
+
+  # Ubuntu's desktop install enables unattended-upgrades, so this is detection,
+  # not prevention. Follows check_foreign_i386: report it and print the command,
+  # never change it. 20auto-upgrades is the actual switch and is readable
+  # without systemd, which `systemctl is-enabled` is not in a container.
+  au=/etc/apt/apt.conf.d/20auto-upgrades
+  if [ -f "$au" ] && grep -qs '^[^/]*APT::Periodic::Unattended-Upgrade[[:space:]]*"1"' "$au"; then
+    warn "unattended-upgrades is enabled — this box can change itself mid-engagement"
+    warn "  (an nginx ABI bump uninstalls the headers-more filter; a python3 point"
+    warn "   release invalidates every pipx venv). Turn it off with:"
+    warn "    sudo systemctl disable --now unattended-upgrades"
+    warn "    sudo dpkg-reconfigure -plow unattended-upgrades"
+  else
+    pass "unattended-upgrades is not enabled"
+  fi
+
+  # Informational only, and honest about why: this reads the LOCAL apt index, so
+  # it means nothing without a preceding `sudo apt-get update`. `apt`, not
+  # `apt-get` — only the former has `list --upgradable`.
+  if ! have apt; then
+    skip "apt absent — upgradable count not read"
+  else
+    n="$(count_lines 'upgradable from' <(apt list --upgradable 2>/dev/null))"
+    if [ "$n" -gt 0 ]; then
+      note "$n apt package(s) upgradable against the local index. Refresh it with"
+      note "  sudo apt-get update, then upgrade by hand — bootstrap.sh never does."
+    else
+      note "nothing upgradable against the local index (true only if apt-get update is recent)"
+    fi
+  fi
+fi
+
 # Each manifest is checked only when the module that installs it ran. Gating
 # them all behind module 00 asserted every AD/web/cloud/RE tool on a box that
 # had only run 00 07 10 90 95 99, which is 45 failures that mean nothing.
 # The mapping is the module table in docs/README.md.
+
+# Presence AND version: a box running impacket 0.12 against a manifest pinning
+# 0.13.1 used to report fully green, because only the name was ever compared.
 check_pipx() {  # check_pipx <manifest>
-  local m="tools.d/$1" installed name
+  local m="tools.d/$1" short name rest spec have_v
   [ -f "$m" ] || return 0
   have pipx || { skip "pipx absent — $1 not checked"; return 0; }
-  installed="$(pipx list --short 2>/dev/null | awk '{print $1}')"
-  while read -r name _; do
+  short="$(pipx_short)"
+  while read -r name rest; do
     [ -n "$name" ] || continue
-    if printf '%s\n' "$installed" | grep -qix "$name"; then pass "pipx: $name"
-    else fail "pipx: $name not installed (from $m)"; fi
+    have_v="$(pipx_version "$name" "$short")"
+    [ -n "$have_v" ] || { fail "pipx: $name not installed (from $m)"; continue; }
+    spec="$(pipx_strip_python "$rest")"
+    case "$spec" in
+      # A git+ pin is a ref, not a version, and `pipx list` reports the package
+      # version instead — so compare against the spec pipx recorded.
+      git+*) drift "pipx $name" "$m" "$spec" "$(pipx_source "$name")" ;;
+      *==*)  drift "pipx $name" "$m" "${spec##*==}" "$have_v" ;;
+      # check.sh already complains about an unpinned manifest line; do not
+      # duplicate that here, just say what the box is carrying.
+      *)     note "pipx $name: $m carries no pin (box has $have_v)" ;;
+    esac
   done < <(rl "$m")
 }
 
-# go install drops binaries in ~/go/bin named for the last path segment, after
-# stripping the @version and any /vN module-major suffix.
+# The manifest pins module@version; go_bin (tests/lib.sh) derives the binary
+# name that `go install` actually wrote into ~/go/bin.
 check_go() {  # check_go <manifest>
-  local m="tools.d/$1" spec p b
+  local m="tools.d/$1" spec b cmp=1
   [ -f "$m" ] || return 0
+  have go || { note "go absent — $1 checked for presence only"; cmp=0; }
   while read -r spec; do
     [ -n "$spec" ] || continue
-    p="${spec%@*}"; p="${p%/v[0-9]}"; b="${p##*/}"
-    [ -x "$HOME/go/bin/$b" ] && pass "go: $b" || fail "go: $HOME/go/bin/$b missing (from $spec)"
+    b="$(go_bin "${spec%@*}")"
+    [ -x "$HOME/go/bin/$b" ] || { fail "go: $HOME/go/bin/$b missing (from $spec)"; continue; }
+    if [ "$cmp" -eq 1 ]; then drift "go $b" "$m" "${spec##*@}" "$(go_version "$b")"
+    else pass "go: $b"; fi
   done < <(rl "$m")
 }
 
-if want 20 'have nxc'; then section "AD and network tools (20)"; check_pipx ad.pipx; fi
-if want 30 'have ffuf'; then section "Web tools (30)"; check_pipx web.pipx; check_go web.go; fi
-if want 40 'have aws'; then section "Cloud tools (40)"; check_pipx cloud.pipx; fi
-if want 50 'have r2'; then section "RE and binary tools (50)"; check_pipx re.pipx; fi
+# pipx records the console scripts each package installed, so ask it rather than
+# guessing that netexec ships nxc or pwntools ships pwn. One "<package>\t<app>"
+# line per venv: an app named after the package if there is one, else the first —
+# impacket alone ships around sixty and any single one proves the venv imports.
+pipx_apps() {
+  have pipx || return 0
+  pipx list --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+for name, meta in (d.get("venvs") or {}).items():
+    apps = ((meta.get("metadata") or {}).get("main_package") or {}).get("apps") or []
+    # Always emit a row, empty second field when the package ships no script:
+    # that is what lets the caller tell "installed but nothing to run" apart
+    # from "not installed at all", which check_pipx has already reported.
+    print(name, next((a for a in apps if a.lower() == name.lower()), apps[0] if apps else ""), sep="\t")
+'
+}
+
+# Assert the tool RUNS, not that it exits 0 — argparse-style CLIs disagree about
+# what --help should exit with, but a broken venv is unambiguous: it tracebacks.
+# This is the class that killed donpapi (lxml vs the 3.14 C API), wfuzz (pycurl
+# vs 3.13) and ropper (ast.Str vs 3.12); all three installed cleanly and failed
+# on first import, which check_pipx cannot see.
+#
+# pipx only, deliberately: a Go binary that execs at all has no import step to
+# fail, and check_go already asserts -x on it.
+smoke_pipx() {  # smoke_pipx <manifest> <pipx_apps-output>
+  local m="tools.d/$1" apps="$2" name b out
+  [ -f "$m" ] || return 0
+  have pipx || return 0
+  while read -r name _; do
+    [ -n "$name" ] || continue
+    b="$(printf '%s\n' "$apps" | awk -F'\t' -v p="$name" 'tolower($1)==tolower(p){print ($2==""?"-":$2); exit}')"
+    # No row at all means the package is not installed, which check_pipx has
+    # already failed on — do not say it twice.
+    [ -n "$b" ] || continue
+    [ "$b" = "-" ] && { note "smoke: $name ships no console script"; continue; }
+    have "$b" || continue
+    out="$(timeout 30 "$b" --help </dev/null 2>&1)"
+    case "$out" in
+      *"Traceback (most recent call last)"*|*ModuleNotFoundError*|*ImportError*)
+        fail "smoke: $b fails to import (from $m)" ;;
+      *) pass "smoke: $b runs" ;;
+    esac
+  done < <(rl "$m")
+}
+
+# Collected once: pipx list --json is slow enough that four calls are noticeable.
+PIPX_APPS="$(pipx_apps)"
+
+if want 20 'have nxc'; then section "AD and network tools (20)"; check_pipx ad.pipx; smoke_pipx ad.pipx "$PIPX_APPS"; fi
+if want 30 'have ffuf'; then
+  section "Web tools (30)"
+  check_pipx web.pipx; smoke_pipx web.pipx "$PIPX_APPS"; check_go web.go
+
+  # Module 30 creates this outside its own install guard, so it must be present
+  # even on a box that already had Burp before the link existed.
+  bb=/opt/w1ld0s/BurpSuiteCommunity/BurpSuiteCommunity
+  if [ -x "$bb" ]; then
+    [ "$(readlink -f /usr/local/bin/burpsuite 2>/dev/null)" = "$bb" ] \
+      && pass "/usr/local/bin/burpsuite -> $bb" \
+      || fail "/usr/local/bin/burpsuite does not point at $bb — re-run ./bootstrap.sh 30"
+  else skip "no Burp under /opt/w1ld0s — its installer may have failed"; fi
+fi
+if want 40 'have aws'; then section "Cloud tools (40)"; check_pipx cloud.pipx; smoke_pipx cloud.pipx "$PIPX_APPS"; fi
+if want 50 'have r2'; then section "RE and binary tools (50)"; check_pipx re.pipx; smoke_pipx re.pipx "$PIPX_APPS"; fi
 if want 60 'have garble'; then section "Payload dev (60)"; check_go payload.go; fi
 
 if want 80 '[ -d "$HOME/tools/binaries" ]'; then
@@ -146,6 +275,17 @@ if want 35 'have nginx'; then
 fi
 
 # ---------------------------------------------------------------------------
+if want 05 'have i3'; then
+  section "Desktop and display manager (05)"
+
+  # Module 05 switches unconditionally; gdm3 here means dpkg-reconfigure failed,
+  # and the Wayland-everywhere behaviour that broke Chromium and Burp is back.
+  dm="$(cat /etc/X11/default-display-manager 2>/dev/null || echo unset)"
+  [ "$dm" = "/usr/sbin/lightdm" ] && pass "display manager is lightdm" \
+    || fail "display manager is '$dm' — module 05 sets /usr/sbin/lightdm"
+fi
+
+# ---------------------------------------------------------------------------
 if want 06 '[ -d /usr/share/plymouth/themes/w1ld0s ]'; then
   section "Boot and greeter branding (06)"
 
@@ -159,12 +299,30 @@ if want 06 '[ -d /usr/share/plymouth/themes/w1ld0s ]'; then
     sudo grep -qE '^GRUB_BACKGROUND=' /etc/default/grub && pass "GRUB_BACKGROUND set" || fail "GRUB_BACKGROUND not set"
     sudo grep -qE '^GRUB_TIMEOUT_STYLE=menu' /etc/default/grub && pass "GRUB_TIMEOUT_STYLE=menu" \
       || fail "GRUB_TIMEOUT_STYLE is not menu — the background never draws without it"
-    for db in /var/lib/gdm3/greeter-dconf-defaults /var/lib/gdm/greeter-dconf-defaults; do
-      [ -f "$db" ] || continue
-      sudo strings "$db" 2>/dev/null | grep -q w1ld0s && pass "greeter dconf db carries w1ld0s" \
-        || fail "$db has no w1ld0s entries — was it recompiled?"
-    done
-  else skip "no passwordless sudo — GRUB and greeter DB checks skipped"; fi
+  else skip "no passwordless sudo — GRUB checks skipped"; fi
+
+  # Branch on the active DM the way modules/06 does. This used to look only for
+  # GDM's compiled dconf db and `continue` when it was absent, so on a lightdm
+  # box the group reported green having checked no greeter at all.
+  case "$(basename "$(cat /etc/X11/default-display-manager 2>/dev/null || echo unknown)")" in
+    lightdm)
+      lg=/etc/lightdm/lightdm-gtk-greeter.conf
+      if [ -f "$lg" ]; then
+        grep -q 'greeter-background.png' "$lg" && pass "lightdm greeter conf carries the w1ld0s background" \
+          || fail "$lg has no w1ld0s background — run ./bootstrap.sh 06"
+      else fail "$lg missing — is lightdm-gtk-greeter installed?"; fi
+      ;;
+    gdm3|gdm)
+      if sudo -n true 2>/dev/null; then
+        for db in /var/lib/gdm3/greeter-dconf-defaults /var/lib/gdm/greeter-dconf-defaults; do
+          [ -f "$db" ] || continue
+          sudo strings "$db" 2>/dev/null | grep -q w1ld0s && pass "greeter dconf db carries w1ld0s" \
+            || fail "$db has no w1ld0s entries — was it recompiled?"
+        done
+      else skip "no passwordless sudo — greeter DB check skipped"; fi
+      ;;
+    *) warn "unknown display manager — greeter branding not checked" ;;
+  esac
 fi
 
 # ---------------------------------------------------------------------------
@@ -201,8 +359,9 @@ cat <<'EOF'
       the Plymouth splash shows the watermark, and — on an encrypted root —
       the LUKS passphrase prompt still appears. This is the one place a bug
       is unrecoverable, so never skip it.
-   2. Greeter: branded background, dark styling, w1ld0s banner. Both the
-      GNOME and i3 sessions are listed.
+   2. Greeter: branded background, dark styling, and both the GNOME and i3
+      sessions listed in the picker. The w1ld0s banner is a GDM-only key
+      (org.gnome.login-screen banner-message-text) — lightdm has no banner.
    3. Log into GNOME: dock at the bottom and autohiding, the w1ld0s app
       folder populated, desktop icons gone. Close every Ptyxis window first,
       then reopen — it reads palettes only at startup.

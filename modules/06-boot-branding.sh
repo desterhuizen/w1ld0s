@@ -121,9 +121,10 @@ fi
 # Login screen — the third stage of the boot chain the user actually sees
 # ---------------------------------------------------------------------------
 # Branded per the display manager module 05 left in charge, rather than assuming
-# one: Ubuntu Desktop keeps gdm3 unless you deliberately switch to lightdm, and
-# a greeter left stock Ubuntu-orange in the middle of a w1ld0s boot is the one
-# frame that gives the game away.
+# one: on a full run that is lightdm, but this module is runnable on its own
+# (./bootstrap.sh 06) against a box still on gdm3, so both are handled. A greeter
+# left stock Ubuntu-orange in the middle of a w1ld0s boot is the one frame that
+# gives the game away.
 GREETER_DIR=/usr/share/w1ld0s
 sudo install -D -m644 "$BRAND/w1ld0s-grub.png"   "$GREETER_DIR/greeter-background.png"
 # No greeter logo is installed — see the org/gnome/login-screen block below for why.

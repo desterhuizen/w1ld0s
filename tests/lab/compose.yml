@@ -1,0 +1,88 @@
+---
+# tests/lab/compose.yml — the scan-lab targets. Runs on your WORKSTATION, not on
+# the w1ld0s box: the box is a guest VM and scans back to the host's address on
+# the hypervisor network. See tests/lab/README.md.
+#
+# Images are pinned by DIGEST, not tag. Both upstreams publish moving tags only
+# (DVWA tags every commit; samba-ad-dc:latest tracks the newest Samba), and a
+# fixture whose surface moves underneath you cannot answer "did my upgrade break
+# this". The digest is the lockfile. Note this inverts tests/Dockerfile's
+# deliberately-unpinned rationale, and correctly so: that image is the checker's
+# own environment, these images ARE the assertion surface.
+name: w1ld0s-lab
+
+services:
+  # Damn Vulnerable Web Application — Apache/PHP, a real login form, and enough
+  # genuine CVE surface that nuclei fires actual templates instead of nothing.
+  web:
+    image: ghcr.io/digininja/dvwa@sha256:38d8f4894c9ec064e42e43eaf423d55ad09a7f59cada82414217113db6129c3e
+    restart: "no"
+    depends_on:
+      - db
+    environment:
+      DB_SERVER: db
+    ports:
+      - "${W1LD0S_LAB_BIND:-127.0.0.1}:${W1LD0S_LAB_HTTP:-80}:80"
+
+  # DVWA's database. Not a scan target and never published — without it every
+  # page is a PHP connection-error traceback, which is a poor thing to anchor
+  # assertions on. Credentials are upstream's own compose defaults.
+  db:
+    image: mariadb@sha256:8020e05c4c498d06c87f0a1db010eb79bd6f8fb30e9b763d4690c34ce1e61008
+    restart: "no"
+    environment:
+      MYSQL_ROOT_PASSWORD: dvwa
+      MYSQL_DATABASE: dvwa
+      MYSQL_USER: dvwa
+      MYSQL_PASSWORD: p@ssw0rd
+    volumes:
+      - db_data:/var/lib/mysql
+
+  # Samba 4.24.6 as an Active Directory domain controller. Provisions the domain
+  # on first start from the env below, so there is no post-provision step and no
+  # user to create by hand — Administrator is created with ADMIN_PASS.
+  #
+  # privileged: true is the upstream image's own requirement, not ours. It is
+  # why this stack belongs on a throwaway lab host and gets torn down after.
+  dc:
+    image: diegogslomp/samba-ad-dc@sha256:4191115cde787f858a3af2703da3f160dbdc3f2608195421b808403b8cd265a0
+    restart: "no"
+    privileged: true
+    hostname: DC1
+    environment:
+      REALM: LAB.W1LD0S.LOCAL
+      DOMAIN: W1LD0S
+      ADMIN_PASS: Passw0rd!
+      DNS_FORWARDER: 1.1.1.1
+      BIND_NETWORK_INTERFACES: "false"
+    ports:
+      # The Samba AD DC port set, minus the dynamic RPC range. 445 is not
+      # meaningfully overridable: enum4linux-ng shells out to smbclient and
+      # rpcclient on their defaults and cannot follow a moved port.
+      - "${W1LD0S_LAB_BIND:-127.0.0.1}:53:53/tcp"
+      - "${W1LD0S_LAB_BIND:-127.0.0.1}:53:53/udp"
+      - "${W1LD0S_LAB_BIND:-127.0.0.1}:88:88/tcp"
+      - "${W1LD0S_LAB_BIND:-127.0.0.1}:88:88/udp"
+      - "${W1LD0S_LAB_BIND:-127.0.0.1}:135:135/tcp"
+      # 137/138 udp (NetBIOS name service) are deliberately NOT published:
+      # macOS runs netbiosd on 137 and the bind fails outright. The cost is
+      # enum4linux-ng's "NetBIOS Names and Workgroup" section; its SMB-session
+      # and RPC sections still answer, and those are what the assertions use.
+      - "${W1LD0S_LAB_BIND:-127.0.0.1}:139:139/tcp"
+      - "${W1LD0S_LAB_BIND:-127.0.0.1}:389:389/tcp"
+      - "${W1LD0S_LAB_BIND:-127.0.0.1}:389:389/udp"
+      - "${W1LD0S_LAB_BIND:-127.0.0.1}:445:445/tcp"
+      - "${W1LD0S_LAB_BIND:-127.0.0.1}:464:464/tcp"
+      - "${W1LD0S_LAB_BIND:-127.0.0.1}:636:636/tcp"
+      - "${W1LD0S_LAB_BIND:-127.0.0.1}:3268:3268/tcp"
+      - "${W1LD0S_LAB_BIND:-127.0.0.1}:3269:3269/tcp"
+    volumes:
+      - dc_etc:/usr/local/samba/etc
+      - dc_private:/usr/local/samba/private
+      - dc_var:/usr/local/samba/var
+
+volumes:
+  db_data:
+  dc_etc:
+  dc_private:
+  dc_var:

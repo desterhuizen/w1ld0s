@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # tests/lib.sh — shared reporting scaffold for tests/check.sh and
-# tests/verify-box.sh. Sourced, never executed.
+# tests/verify-box.sh, plus the box probes verify-box.sh and freeze-pins.sh both
+# need to read installed versions. Sourced, never executed.
 #
 # Deliberately NOT lib/common.sh: that one is the provisioner's framework and
 # dies on root / missing sudo the moment it is sourced (lib/common.sh:65-66).
@@ -67,6 +68,69 @@ parse_flags() {
     shift
   done
   return 0
+}
+
+# ---- box probes ------------------------------------------------------------
+# What a PROVISIONED box reports for a tool it has installed. Shared by
+# verify-box.sh (which compares these against the manifests) and freeze-pins.sh
+# (which prints them back out in manifest shape), so the two cannot drift apart.
+#
+# These return their answer on STDOUT and print nothing else, deliberately —
+# freeze-pins.sh's stdout is a manifest. They use `command -v` rather than a
+# `have` helper so this file stays free of dependencies on its callers.
+
+# `pipx list --short` prints "name version", one per line. Callers that check a
+# whole manifest should capture it once rather than calling this in a loop.
+pipx_short() { command -v pipx >/dev/null 2>&1 && pipx list --short 2>/dev/null; }
+
+# PyPI normalises names, so the manifest's "bloodyAD" is pipx's "bloodyad".
+pipx_version() {  # pipx_version <manifest-name> [pipx-list-short-output]
+  local short="${2:-$(pipx_short)}"
+  [ -n "$short" ] || return 0
+  printf '%s\n' "$short" | awk -v n="$1" 'tolower($1)==tolower(n){print $2; exit}'
+}
+
+# For a git+ pin the installed REF is what matters, and `pipx list` reports a
+# package version instead. pipx records the spec it installed from; read that.
+# python3 rather than jq — both are in base.apt, but verify-box.sh already sets
+# the precedent of parsing box state with an inline python3 -c.
+#
+# .main_package.package_or_url is pipx internals, not a documented interface.
+# If it moves, this returns empty and the caller reports "version unknown".
+pipx_source() {  # pipx_source <manifest-name>
+  local d="$HOME/.local/share/pipx/venvs" m c
+  m="$d/$1/pipx_metadata.json"
+  if [ ! -f "$m" ] && [ -d "$d" ]; then
+    c="$(find "$d" -maxdepth 1 -mindepth 1 -type d -iname "$1" 2>/dev/null | head -n1)"
+    [ -n "$c" ] && m="$c/pipx_metadata.json"
+  fi
+  [ -f "$m" ] || return 0
+  python3 -c 'import json,sys
+try:
+    print(json.load(open(sys.argv[1])).get("main_package", {}).get("package_or_url") or "")
+except Exception:
+    pass' "$m" 2>/dev/null
+}
+
+# go install drops the binary in ~/go/bin named for the last path segment, after
+# stripping any /vN module-major suffix. Without the strip, dalfox/v2 would look
+# for a binary called "v2".
+go_bin() { local p="${1%/v[0-9]}"; printf '%s' "${p##*/}"; }
+
+# `go version -m` reports the module version on a "mod <path> <version>" line.
+go_version() {  # go_version <binary-name>
+  command -v go >/dev/null 2>&1 || return 0
+  [ -x "$HOME/go/bin/$1" ] || return 0
+  go version -m "$HOME/go/bin/$1" 2>/dev/null | awk '$1=="mod"{print $3; exit}'
+}
+
+# Strip a leading "--python X.Y" directive off a .pipx spec column. The
+# directive lives in the manifest so every interpreter exception is visible
+# where the tool is declared; it is not part of the pip spec.
+pipx_strip_python() {  # pipx_strip_python <spec-column>
+  local s="$1"
+  [[ "$s" =~ ^--python[=[:space:]]+[0-9]+\.[0-9]+[[:space:]]+(.*)$ ]] && s="${BASH_REMATCH[1]}"
+  printf '%s' "$s"
 }
 
 # Print the tally and exit with the right status. Call as the last line.
