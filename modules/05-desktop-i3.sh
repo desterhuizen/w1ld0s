@@ -103,22 +103,6 @@ fi
 # --- i3blocks-contrib (your i3blocks.conf references these scripts) ---------
 [ -d "$HOME/.config/i3blocks" ] || git clone --quiet https://github.com/vivien/i3blocks-contrib "$HOME/.config/i3blocks" || warn "i3blocks-contrib clone failed"
 
-# --- VMware RDP keymap fix ---------------------------------------------------
-# Only applied if not already present in the i3 config.
-if [ -f "$HOME/.config/i3/config" ] && ! grep -q "keycode 94 = grave" "$HOME/.config/i3/config"; then
-  log "Appending VMware RDP xmodmap keymap fixes to i3 config…"
-  cat >> "$HOME/.config/i3/config" <<'EOF'
-
-# --- w1ld0s: VMware RDP keymap fixes ---
-exec_always --no-startup-id xmodmap -e "keycode 94 = grave asciitilde"
-exec_always --no-startup-id xmodmap -e "keycode 51 = backslash bar backslash bar"
-exec_always --no-startup-id xmodmap -e "keycode 49 = numbersign asciitilde"
-exec_always --no-startup-id xmodmap -e "keycode 11 = 2 at 2 at"
-exec_always --no-startup-id xmodmap -e "keycode 48 = apostrophe quotedbl apostrophe quotedbl"
-exec_always --no-startup-id xmodmap -e "keycode 21 = section plusminus"
-EOF
-fi
-
 # --- display manager and default session -------------------------------------
 # Two separate settings, and the earlier version of this block only did the first
 # one. Switching the display manager does NOT get the box off Wayland: the

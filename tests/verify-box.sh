@@ -298,6 +298,17 @@ if want 05 'have i3'; then
     && pass "default session is i3" \
     || fail "no user-session=i3 in /etc/lightdm/lightdm.conf.d — the greeter will default to GNOME/Wayland"
 
+  # The i3 config used to get a block of xmodmap keycode remaps appended for
+  # VMware RDP. This box is not reached that way, and on a normal console the
+  # remaps mangle the keys. install_asset overwrites the config, so a re-run
+  # clears them — report a stale one rather than assuming it is gone.
+  i3cfg="$HOME/.config/i3/config"
+  if [ -f "$i3cfg" ]; then
+    grep -q 'xmodmap -e "keycode' "$i3cfg" \
+      && fail "$i3cfg still has xmodmap keycode remaps — re-run ./bootstrap.sh 05" \
+      || pass "i3 config carries no xmodmap keycode remaps"
+  else fail "$i3cfg missing"; fi
+
   # Only meaningful from a real desktop session; over ssh this is 'tty'.
   case "${XDG_SESSION_TYPE:-}" in
     x11)     pass "this session is x11" ;;
