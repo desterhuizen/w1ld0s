@@ -278,11 +278,32 @@ fi
 if want 05 'have i3'; then
   section "Desktop and display manager (05)"
 
-  # Module 05 switches unconditionally; gdm3 here means dpkg-reconfigure failed,
-  # and the Wayland-everywhere behaviour that broke Chromium and Burp is back.
+  # Module 05 switches unconditionally; gdm3 here means the switch failed, and
+  # module 06 will have branded the wrong greeter as a result.
   dm="$(cat /etc/X11/default-display-manager 2>/dev/null || echo unset)"
   [ "$dm" = "/usr/sbin/lightdm" ] && pass "display manager is lightdm" \
     || fail "display manager is '$dm' — module 05 sets /usr/sbin/lightdm"
+
+  # The file above is only debconf's record. THIS symlink is what systemd boots,
+  # and the two can disagree — a box has been seen with the file reading lightdm
+  # while gdm3 was still the unit that started. Check the one that decides.
+  dmu="$(basename "$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || echo none)")"
+  [ "$dmu" = "lightdm.service" ] && pass "display-manager.service is lightdm.service" \
+    || fail "display-manager.service is '$dmu' — that is what boots, not $dm"
+
+  # Switching the DM does not choose a session type. i3 is the only X11 desktop
+  # on 26.04 (GNOME Shell 50 is Wayland-only), so it has to be the default or the
+  # first login lands back on Wayland, where Brave and Burp misbehave.
+  grep -qxr 'user-session=i3' /etc/lightdm/lightdm.conf.d/ 2>/dev/null \
+    && pass "default session is i3" \
+    || fail "no user-session=i3 in /etc/lightdm/lightdm.conf.d — the greeter will default to GNOME/Wayland"
+
+  # Only meaningful from a real desktop session; over ssh this is 'tty'.
+  case "${XDG_SESSION_TYPE:-}" in
+    x11)     pass "this session is x11" ;;
+    wayland) fail "this session is wayland — pick the i3 session at the greeter" ;;
+    *)       skip "session type is '${XDG_SESSION_TYPE:-unset}' — run from the desktop to check it" ;;
+  esac
 fi
 
 # ---------------------------------------------------------------------------
