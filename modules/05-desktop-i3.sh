@@ -28,6 +28,11 @@ fi
 # --- import your i3 config, i3blocks, fonts, terminator (verbatim) ----------
 install_asset i3/config          "$HOME/.config/i3/config"
 install_asset i3/i3blocks.conf   "$HOME/.config/i3/i3blocks.conf"
+# setup_workspace (w1ld0s-tools) hardcodes this path in its append_layout call,
+# so the name and the location are load-bearing rather than a convention. The
+# asset shipped here but was never installed, so the layout silently never
+# restored and setup_workspace had nothing to append.
+install_asset i3/i3-workspace-1.json "$HOME/.config/i3/i3-workspace-1.json"
 [ -d "$W1LD0S_ROOT/assets/i3/scripts" ] && { mkdir -p "$HOME/.config/i3/scripts"; cp -a "$W1LD0S_ROOT/assets/i3/scripts/." "$HOME/.config/i3/scripts/"; }
 install_asset terminator/config  "$HOME/.config/terminator/config"
 mkdir -p "$HOME/.fonts" && cp -a "$W1LD0S_ROOT/assets/fonts/." "$HOME/.fonts/" && fc-cache -f "$HOME/.fonts" >/dev/null 2>&1

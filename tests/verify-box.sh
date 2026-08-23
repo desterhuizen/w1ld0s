@@ -298,6 +298,12 @@ if want 05 'have i3'; then
     && pass "default session is i3" \
     || fail "no user-session=i3 in /etc/lightdm/lightdm.conf.d — the greeter will default to GNOME/Wayland"
 
+  # setup_workspace (w1ld0s-tools) appends this layout by absolute path, so a
+  # missing file is a silent no-op in the middle of an engagement setup.
+  lay="$HOME/.config/i3/i3-workspace-1.json"
+  [ -f "$lay" ] && pass "i3 workspace layout installed" \
+    || fail "$lay missing — setup_workspace's append_layout has nothing to read"
+
   # The i3 config used to get a block of xmodmap keycode remaps appended for
   # VMware RDP. This box is not reached that way, and on a normal console the
   # remaps mangle the keys. install_asset overwrites the config, so a re-run
