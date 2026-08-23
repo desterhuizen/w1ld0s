@@ -28,6 +28,11 @@ fi
 # --- import your i3 config, i3blocks, fonts, terminator (verbatim) ----------
 install_asset i3/config          "$HOME/.config/i3/config"
 install_asset i3/i3blocks.conf   "$HOME/.config/i3/i3blocks.conf"
+# setup_workspace (w1ld0s-tools) hardcodes this path in its append_layout call,
+# so the name and the location are load-bearing rather than a convention. The
+# asset shipped here but was never installed, so the layout silently never
+# restored and setup_workspace had nothing to append.
+install_asset i3/i3-workspace-1.json "$HOME/.config/i3/i3-workspace-1.json"
 [ -d "$W1LD0S_ROOT/assets/i3/scripts" ] && { mkdir -p "$HOME/.config/i3/scripts"; cp -a "$W1LD0S_ROOT/assets/i3/scripts/." "$HOME/.config/i3/scripts/"; }
 install_asset terminator/config  "$HOME/.config/terminator/config"
 mkdir -p "$HOME/.fonts" && cp -a "$W1LD0S_ROOT/assets/fonts/." "$HOME/.fonts/" && fc-cache -f "$HOME/.fonts" >/dev/null 2>&1
@@ -102,22 +107,6 @@ fi
 
 # --- i3blocks-contrib (your i3blocks.conf references these scripts) ---------
 [ -d "$HOME/.config/i3blocks" ] || git clone --quiet https://github.com/vivien/i3blocks-contrib "$HOME/.config/i3blocks" || warn "i3blocks-contrib clone failed"
-
-# --- VMware RDP keymap fix ---------------------------------------------------
-# Only applied if not already present in the i3 config.
-if [ -f "$HOME/.config/i3/config" ] && ! grep -q "keycode 94 = grave" "$HOME/.config/i3/config"; then
-  log "Appending VMware RDP xmodmap keymap fixes to i3 config…"
-  cat >> "$HOME/.config/i3/config" <<'EOF'
-
-# --- w1ld0s: VMware RDP keymap fixes ---
-exec_always --no-startup-id xmodmap -e "keycode 94 = grave asciitilde"
-exec_always --no-startup-id xmodmap -e "keycode 51 = backslash bar backslash bar"
-exec_always --no-startup-id xmodmap -e "keycode 49 = numbersign asciitilde"
-exec_always --no-startup-id xmodmap -e "keycode 11 = 2 at 2 at"
-exec_always --no-startup-id xmodmap -e "keycode 48 = apostrophe quotedbl apostrophe quotedbl"
-exec_always --no-startup-id xmodmap -e "keycode 21 = section plusminus"
-EOF
-fi
 
 # --- display manager and default session -------------------------------------
 # Two separate settings, and the earlier version of this block only did the first
