@@ -46,6 +46,15 @@ else
   else
     log "Building ligolo-ng (make all — proxy + agent, linux/windows, both arches)…"
     ( cd "$LIGOLO_DIR" && make all ) || warn "ligolo-ng build failed"
+    # Every ligolo target depends on upstream's `lint`, which runs `go fmt` over
+    # the checkout — so the build leaves it dirty as soon as the installed
+    # toolchain formats anything differently from what upstream committed, and
+    # clone_or_pull's `git pull --ff-only` then refuses forever. Drop the churn.
+    # Scoped to *.go, which is all `go fmt` rewrites; a bare `checkout -- .`
+    # would reach dist/ too if upstream ever tracks it.
+    # (`lint` also runs `go vet`; an upstream vet diagnostic aborts make all
+    # before any binary exists, which is why the guard above checks all five.)
+    git -C "$LIGOLO_DIR" checkout -- '*.go' 2>/dev/null || true
   fi
 fi
 if [ -x "$LIGOLO_PROXY" ]; then
