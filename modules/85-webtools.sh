@@ -26,8 +26,12 @@ fi
 # Match that for the subdirectory, and cope with a box where 35 has not run.
 if [ ! -d "$WEBTOOLS" ]; then
   sudo mkdir -p "$WEBTOOLS" || { warn "could not create $WEBTOOLS"; return 0 2>/dev/null || exit 0; }
-  sudo chown "$(id -un):$(id -gn)" "$WEBTOOLS" || warn "could not chown $WEBTOOLS"
 fi
+# Outside the guard on purpose, the way module 35 chowns the webroot itself every
+# run. Inside it, a directory that ended up root-owned — a failed chown here, or
+# anything else that created it — would fail the writability check below on this
+# run and every run after, with nothing left that could ever repair it.
+sudo chown "$(id -un):$(id -gn)" "$WEBTOOLS" || warn "could not chown $WEBTOOLS"
 [ -w "$WEBTOOLS" ] || { warn "$WEBTOOLS is not writable by $(id -un) — skipping"; return 0 2>/dev/null || exit 0; }
 
 # --- files already on the box ----------------------------------------------
