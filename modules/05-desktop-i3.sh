@@ -153,14 +153,26 @@ else
       || warn "$DM_UNIT still points at $(basename "$(readlink -f "$DM_UNIT" 2>/dev/null || echo nothing)") — gdm3 may still start"
   fi
   # Default session: i3, so the first login after provisioning lands on X11
-  # instead of the Ubuntu GNOME session, which is Wayland. 90- sorts after
-  # Debian's 01_ and Ubuntu's 02_ drop-ins, so this one wins. It sets the
-  # default, not a restriction — GNOME stays in the greeter's session picker.
+  # instead of the Ubuntu GNOME session, which is Wayland. It sets the default,
+  # not a restriction — GNOME stays in the greeter's session picker.
+  #
+  # LightDM reads /usr/share/lightdm/lightdm.conf.d/*.conf, then
+  # /etc/lightdm/lightdm.conf.d/*.conf, then /etc/lightdm/lightdm.conf, last
+  # value winning. Debian's 01_ and Ubuntu's 02_ drop-ins live in the FIRST of
+  # those, a whole directory below this one, so the 90- prefix is not what beats
+  # them — it only orders us against other drop-ins in the same directory. What
+  # a drop-in cannot outrank is lightdm.conf itself, so say so rather than write
+  # a file that looks right and loses.
   LDM_SESSION_CONF=/etc/lightdm/lightdm.conf.d/90-w1ld0s-session.conf
   if ! grep -qx 'user-session=i3' "$LDM_SESSION_CONF" 2>/dev/null; then
     sudo install -d -m755 /etc/lightdm/lightdm.conf.d
     printf '[Seat:*]\nuser-session=i3\n' | sudo tee "$LDM_SESSION_CONF" >/dev/null \
       && ok "default session set to i3 ($LDM_SESSION_CONF)"
+  fi
+  LDM_OVERRIDE="$(grep -E '^[[:space:]]*user-session[[:space:]]*=' /etc/lightdm/lightdm.conf 2>/dev/null \
+                  | tail -n1 | cut -d= -f2- | tr -d '[:space:]')"
+  if [ -n "$LDM_OVERRIDE" ] && [ "$LDM_OVERRIDE" != i3 ]; then
+    warn "/etc/lightdm/lightdm.conf sets user-session=$LDM_OVERRIDE — it is read after $LDM_SESSION_CONF and wins; remove that line or the greeter still defaults to $LDM_OVERRIDE"
   fi
 fi
 ACTIVE_DM="$(basename "$(cat "$DM_FILE" 2>/dev/null || echo unknown)")"

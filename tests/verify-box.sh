@@ -355,6 +355,17 @@ if want 05 'have i3'; then
     && pass "default session is i3" \
     || fail "no user-session=i3 in /etc/lightdm/lightdm.conf.d — the greeter will default to GNOME/Wayland"
 
+  # The drop-in above is not the last word. LightDM reads the conf.d directories
+  # first and /etc/lightdm/lightdm.conf last, so a user-session= there overrides
+  # it — and the check above would still pass while the greeter starts Wayland.
+  ldmo="$(grep -E '^[[:space:]]*user-session[[:space:]]*=' /etc/lightdm/lightdm.conf 2>/dev/null \
+          | tail -n1 | cut -d= -f2- | tr -d '[:space:]')"
+  if [ -n "$ldmo" ] && [ "$ldmo" != i3 ]; then
+    fail "/etc/lightdm/lightdm.conf sets user-session=$ldmo — it is read last and overrides the conf.d drop-in"
+  else
+    pass "nothing in /etc/lightdm/lightdm.conf overrides the i3 session"
+  fi
+
   # setup_workspace (w1ld0s-tools) appends this layout by absolute path, so a
   # missing file is a silent no-op in the middle of an engagement setup.
   lay="$HOME/.config/i3/i3-workspace-1.json"
