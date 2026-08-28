@@ -206,7 +206,25 @@ if want 30 'have ffuf'; then
 fi
 if want 40 'have aws'; then section "Cloud tools (40)"; check_pipx cloud.pipx; smoke_pipx cloud.pipx "$PIPX_APPS"; fi
 if want 50 'have r2'; then section "RE and binary tools (50)"; check_pipx re.pipx; smoke_pipx re.pipx "$PIPX_APPS"; fi
-if want 60 'have garble'; then section "Payload dev (60)"; check_go payload.go; fi
+if want 60 'have garble'; then
+  section "Payload dev (60)"
+  check_go payload.go
+
+  # Metasploit is the one apt source with no pin to drift-check, so the useful
+  # assertions are that the repo is wired the way module 60 wrote it and that
+  # msfconsole answers. A missing keyring with the tool present means the repo
+  # was added some other way and updates will not be verified.
+  have msfconsole && pass "msfconsole present" || fail "msfconsole missing (module 60)"
+  [ -s /usr/share/keyrings/metasploit-framework.gpg ] \
+    && pass "metasploit keyring installed" \
+    || fail "no /usr/share/keyrings/metasploit-framework.gpg — the apt repo is unsigned or absent"
+  if grep -q 'signed-by=/usr/share/keyrings/metasploit-framework.gpg' \
+       /etc/apt/sources.list.d/metasploit-framework.list 2>/dev/null; then
+    pass "metasploit apt source is signed-by the keyring"
+  else
+    fail "metasploit-framework.list missing or not signed-by — module 60 writes both"
+  fi
+fi
 
 if want 80 '[ -d "$HOME/tools/binaries" ]'; then
   section "Release binaries (80)"
@@ -219,6 +237,45 @@ if want 80 '[ -d "$HOME/tools/binaries" ]'; then
       *) [ -e "$HOME/$dest" ] && pass "gh_release: $dest" || fail "gh_release: ~/$dest missing" ;;
     esac
   done < <(rl tools.d/releases.gh)
+
+  # --- the two tools module 80 builds/links out of a checkout ---------------
+  # ligolo-proxy needs BOTH names: the shim for interactive use and the
+  # /usr/local/bin one because the proxy only ever runs under sudo, whose
+  # secure_path does not include ~/.local/bin.
+  lig="$HOME/tools/repos/ligolo-ng/dist/ligolo-ng-proxy-linux_$(dpkg --print-architecture 2>/dev/null || echo amd64)"
+  [ -x "$lig" ] && pass "ligolo-ng built: $(basename "$lig")" \
+    || fail "no ligolo proxy at $lig — 'make all' did not run or failed"
+  have ligolo-proxy && pass "ligolo-proxy on PATH" || fail "ligolo-proxy not on PATH (shim missing)"
+  [ -x /usr/local/bin/ligolo-proxy ] && pass "ligolo-proxy reachable under sudo" \
+    || fail "/usr/local/bin/ligolo-proxy missing — 'sudo ligolo-proxy' will not resolve"
+
+  have searchsploit && pass "searchsploit on PATH" || fail "searchsploit not on PATH (module 80)"
+  if [ -f "$HOME/tools/repos/exploitdb/files_exploits.csv" ]; then
+    pass "exploitdb corpus present"
+  else
+    fail "no files_exploits.csv in ~/tools/repos/exploitdb — searchsploit has nothing to search"
+  fi
+  # Without an rc naming the checkout, searchsploit still works but nags to
+  # stderr on every search, which is what module 80 writes the rc to avoid.
+  grep -q "$HOME/tools/repos/exploitdb" "$HOME/.searchsploit_rc" 2>/dev/null \
+    && pass "\$HOME/.searchsploit_rc points at the checkout" \
+    || warn "\$HOME/.searchsploit_rc missing or points elsewhere — expect an '[i] Found (#2)' nag per search"
+fi
+
+# ---------------------------------------------------------------------------
+if want 85 '[ -d /var/www/html/tools ]'; then
+  section "Webroot tooling (85)"
+
+  # webroot.copy rows are globs and their sources are best-effort, so the
+  # assertion is on the staged basenames, not on the manifest paths.
+  for f in linpeas.sh winPEASx64.exe pspy64 mimikatz.exe Rubeus.exe PowerView.ps1; do
+    [ -f "/var/www/html/tools/$f" ] && pass "webroot: $f" || fail "webroot: $f missing (module 85)"
+  done
+
+  # A file staged 0600 serves as a 404 with nothing in the error log to say why.
+  unreadable="$(find /var/www/html/tools -maxdepth 1 -type f ! -perm -o=r 2>/dev/null | wc -l | tr -d ' ')"
+  [ "$unreadable" = "0" ] && pass "every staged file is world-readable" \
+    || fail "$unreadable staged file(s) not readable by www-data — they will 404"
 fi
 
 # ---------------------------------------------------------------------------

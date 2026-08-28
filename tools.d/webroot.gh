@@ -1,0 +1,24 @@
+# webroot.gh — GitHub-release assets fetched STRAIGHT into the nginx webroot.
+# Consumed by modules/85-webtools.sh via the gh_release helper.
+#
+# Format: <owner/repo[@tag]>  <asset-regex>  <filename-under-/var/www/html/tools>
+# Same shape as releases.gh, except the third field is a bare filename relative
+# to the webroot rather than a path relative to $HOME.
+#
+# This file is only for things NO other module installs. Anything already on the
+# box belongs in webroot.copy — see the note there about not carrying two
+# versions of the same tool.
+#
+# No @ARCH@ here, ever: these are dropped on the TARGET, so the arch is the
+# victim's. That is why both linpeas_linux_386 and _amd64 are listed.
+
+# --- PEASS-ng: the enumeration scripts a shell pulls first ---
+peass-ng/PEASS-ng@20260824-c1d29dcd  /linpeas\.sh$            linpeas.sh
+peass-ng/PEASS-ng@20260824-c1d29dcd  /linpeas_linux_386$      linpeas_linux_386
+peass-ng/PEASS-ng@20260824-c1d29dcd  /linpeas_linux_amd64$    linpeas_linux_amd64
+peass-ng/PEASS-ng@20260824-c1d29dcd  /linpeas_linux_arm64$    linpeas_linux_arm64
+peass-ng/PEASS-ng@20260824-c1d29dcd  /winPEAS\.bat$           winPEAS.bat
+peass-ng/PEASS-ng@20260824-c1d29dcd  /winPEASany\.exe$        winPEASany.exe
+peass-ng/PEASS-ng@20260824-c1d29dcd  /winPEASany_ofs\.exe$    winPEASany_ofs.exe
+peass-ng/PEASS-ng@20260824-c1d29dcd  /winPEASx64\.exe$        winPEASx64.exe
+peass-ng/PEASS-ng@20260824-c1d29dcd  /winPEASx86\.exe$        winPEASx86.exe

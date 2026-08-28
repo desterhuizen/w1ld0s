@@ -27,6 +27,7 @@ ALL_MODULES=(
   60-payload-dev
   70-wireless
   80-repos-binaries
+  85-webtools
   90-tools
   95-private
   99-secrets

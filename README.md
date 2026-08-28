@@ -30,7 +30,7 @@ starting over.
 
 | | |
 |---|---|
-| `bootstrap.sh` | Runs the 16 modules in order; accepts a subset by name. |
+| `bootstrap.sh` | Runs the 17 modules in order; accepts a subset by name. |
 | `lib/common.sh` | The whole framework: logging, `apt_install`, `pipx_tool`, `venv_create`, `gh_release`, `clone_or_pull`. |
 | `modules/` | One numbered step per domain — base, desktop, AD, web, cloud, RE, payloads, wireless. |
 | `tools.d/` | Declarative, pinnable manifests. **The manifests are the lockfile.** |
