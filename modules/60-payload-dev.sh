@@ -67,14 +67,22 @@ MSF_URI=https://downloads.metasploit.com/data/releases/metasploit-framework/apt
 
 if [ ! -s "$MSF_KEYRING" ]; then
   log "Adding the Metasploit nightly apt repo…"
-  if curl -fsSL https://apt.metasploit.com/metasploit-framework.gpg.key \
-       | gpg --dearmor > /tmp/metasploit-framework.gpg 2>/dev/null; then
-    sudo install -o root -g root -m 644 /tmp/metasploit-framework.gpg "$MSF_KEYRING" \
+  # mktemp rather than a fixed /tmp path — module 35's SITE_TMP is the same
+  # pattern. Test the dearmored file instead of the pipeline: pipefail is set by
+  # bootstrap.sh, not lib/common.sh, so running this module on its own would see
+  # gpg's status and nothing else. --show-keys is what rejects a captive
+  # portal's HTML; the re-fetch guard above is only [ ! -s ], so a non-empty but
+  # bogus keyring would stick and break apt-get update's signature check for good.
+  MSF_TMP="$(mktemp)"
+  curl -fsSL https://apt.metasploit.com/metasploit-framework.gpg.key \
+    | gpg --dearmor > "$MSF_TMP" 2>/dev/null
+  if [ -s "$MSF_TMP" ] && gpg --show-keys "$MSF_TMP" >/dev/null 2>&1; then
+    sudo install -o root -g root -m 644 "$MSF_TMP" "$MSF_KEYRING" \
       || warn "metasploit: could not install the keyring"
   else
     warn "metasploit: could not fetch or dearmor the signing key"
   fi
-  rm -f /tmp/metasploit-framework.gpg
+  rm -f "$MSF_TMP"
 fi
 
 if [ ! -s "$MSF_KEYRING" ]; then
