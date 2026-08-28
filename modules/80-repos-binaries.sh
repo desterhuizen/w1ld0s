@@ -20,16 +20,41 @@ done < <(read_list repos.git)
 # and its arch is the target's, not ours.
 LIGOLO_DIR="$REPOS_DIR/ligolo-ng"
 LIGOLO_PROXY="$LIGOLO_DIR/dist/ligolo-ng-proxy-linux_$W1LD0S_ARCH_ALT"
+# `all` is four sub-targets and `linux` runs first, so the proxy above lands as
+# soon as that one finishes. Guarding the rebuild on it alone would make a
+# half-finished build permanent: the module logs "already built" from then on,
+# and module 85 warns "nothing matches" for the agent rows in webroot.copy on
+# every run. These are the artifacts that manifest expects — check all of them.
+LIGOLO_ARTIFACTS=(
+  "$LIGOLO_PROXY"
+  "$LIGOLO_DIR/dist/ligolo-ng-agent-linux_amd64"
+  "$LIGOLO_DIR/dist/ligolo-ng-agent-linux_arm64"
+  "$LIGOLO_DIR/dist/ligolo-ng-agent-windows_amd64.exe"
+  "$LIGOLO_DIR/dist/ligolo-ng-agent-windows_arm64.exe"
+)
+ligolo_built() {
+  local f
+  for f in "${LIGOLO_ARTIFACTS[@]}"; do [ -e "$f" ] || return 1; done
+}
 if [ ! -d "$LIGOLO_DIR" ]; then
   warn "ligolo-ng not cloned — check the clone above; skipping the build"
 elif ! have go; then
   warn "go not on PATH — skipping the ligolo-ng build (run module 00 first)"
 else
-  if [ -x "$LIGOLO_PROXY" ]; then
-    log "ligolo-ng already built ($(basename "$LIGOLO_PROXY"))"
+  if ligolo_built; then
+    log "ligolo-ng already built (${#LIGOLO_ARTIFACTS[@]} artifacts in dist/)"
   else
     log "Building ligolo-ng (make all — proxy + agent, linux/windows, both arches)…"
     ( cd "$LIGOLO_DIR" && make all ) || warn "ligolo-ng build failed"
+    # Every ligolo target depends on upstream's `lint`, which runs `go fmt` over
+    # the checkout — so the build leaves it dirty as soon as the installed
+    # toolchain formats anything differently from what upstream committed, and
+    # clone_or_pull's `git pull --ff-only` then refuses forever. Drop the churn.
+    # Scoped to *.go, which is all `go fmt` rewrites; a bare `checkout -- .`
+    # would reach dist/ too if upstream ever tracks it.
+    # (`lint` also runs `go vet`; an upstream vet diagnostic aborts make all
+    # before any binary exists, which is why the guard above checks all five.)
+    git -C "$LIGOLO_DIR" checkout -- '*.go' 2>/dev/null || true
   fi
 fi
 if [ -x "$LIGOLO_PROXY" ]; then
