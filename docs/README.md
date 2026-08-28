@@ -90,7 +90,7 @@ Session settings need a live D-Bus session bus, which `bootstrap.sh` usually doe
 | `50-re-binary` | gdb/radare2/binwalk/checksec/ltrace/strace/patchelf, pwndbg (+uv), `re.pipx`, Ghidra, apktool/jadx/dex2jar |
 | `60-payload-dev` | mingw-w64 cross-compile + wine + mono, garble, SharpCollection, ysoserial jar, DotNetToJScript, RunasCs, mimikatz, BeEF |
 | `70-wireless` | aircrack-ng/reaver/bully/cowpatty/mdk4, bluez, rtl-sdr/hackrf/gqrx, hcxtools + hcxdumptool from source |
-| `80-repos-binaries` | Clones `repos.git`, fetches the binary rows of `releases.gh`, Sysinternals Suite, putty-tools |
+| `80-repos-binaries` | Clones `repos.git`, builds **ligolo-ng** (`make all` — proxy + agent, linux/windows, both arches) and links `ligolo-proxy` into `~/.local/bin` *and* `/usr/local/bin`, links **searchsploit** out of the exploitdb clone and writes a `~/.searchsploit_rc` naming it, fetches the binary rows of `releases.gh`, Sysinternals Suite, putty-tools |
 | `90-tools` | Generates this box's ed25519 key, clones [w1ld0s-tools](https://github.com/desterhuizen/w1ld0s-tools) from `tools.d/tools.git` over https, runs its `setup_links`, builds reverse_ssh and authorises the key, seeds `target`/`attack` state |
 | `95-private` | Optional overlay. No-op unless you create `tools.d/private.git` (gitignored) with clone URLs for repos that can't be public; only then does it register your key with GitHub and clone them |
 | `99-secrets` | Installs nothing. Prints the migration checklist and reports which secrets are present or missing |
@@ -112,6 +112,8 @@ Session settings need a live D-Bus session bus, which `bootstrap.sh` usually doe
 **RE / binary / mobile** — Ghidra, gdb + pwndbg, radare2, binwalk, edb-debugger, checksec, ltrace, strace, patchelf; pwntools, ropper, ROPgadget, frida-tools, objection, volatility3, flask-unsign, maigret *(pipx)*; apktool, jadx, dex2jar.
 
 **Payload dev** — mingw-w64, gcc/g++-mingw-w64, wine, wine32/64, mono-complete; garble *(go)*; SharpCollection, ysoserial, DotNetToJScript, RunasCs, mimikatz, BeEF.
+
+**Pivoting / exploit search** — ligolo-ng *(built from source, `ligolo-proxy` on both the user and the system PATH)*; reverse_ssh, chisel, dnscat2 *(git)*; exploitdb + `searchsploit` *(git, GitLab)*.
 
 **Wireless / SDR / BT** — aircrack-ng, reaver, bully, cowpatty, mdk4, bluez, rfkill, iw, wireless-tools, rtl-sdr, hackrf, gqrx-sdr, hcxtools, hcxdumptool. **These need USB passthrough of a real adapter — a VM has no radios by default.**
 
@@ -392,7 +394,7 @@ As of the aarch64 build of 2026-08-15 everything below is pinned:
 - `go version -m ~/go/bin/<tool>` → `module@vX.Y.Z` in `tools.d/*.go`. Keep the *install* path and append the *module* version (`…/httpx/cmd/httpx@v1.10.0`).
 - `tools.d/releases.gh` and the `gh_release` calls in modules 30/40/50/60 pin with `owner/repo@tag`. Pin the **tag**, never the resolved asset filename — the filename carries the arch, so a pinned filename cannot be rebuilt on the other architecture. A tag that doesn't exist 404s and warns; it never falls back to latest.
 - Gems pin with `-v` (`evil-winrm 3.9`, `wpscan 4.1.0`, `addressable 2.9.0`); `GO_VERSION` in `modules/00-base.sh`.
-- Git checkouts (sqlmap, joomscan, whatweb, Responder, …) are the exception: `clone_or_pull` tracks the default branch and fast-forwards on every run. That is deliberate for tools whose value is a signature/plugin corpus, but it does mean those are the parts of the box a re-run can change.
+- Git checkouts (sqlmap, joomscan, whatweb, Responder, ligolo-ng, exploitdb, …) are the exception: `clone_or_pull` tracks the default branch and fast-forwards on every run. That is deliberate for tools whose value is a signature/plugin corpus, but it does mean those are the parts of the box a re-run can change.
 
 **A bumped pin lands on the next VM, not on the box you are sitting at.** Only the
 `.go` manifests behave otherwise, because `go_install_list` has no presence check and
@@ -434,6 +436,8 @@ freeze back whatever came out green.
 - **The lab is Samba, and Samba is not Windows.** There is no ADCS role, so `certipy` cannot be exercised at all; there is no LAPS, no gMSA, and none of the Windows-specific quirks that AD tooling actually trips over. [GOAD](https://github.com/Orange-Cyberdefense/GOAD) is the real answer for that depth, but it is Vagrant plus real Windows VMs — 20GB of RAM for GOAD-Light and around 115GB of disk — so nothing here is built for it. If you do stand it up, put its DC's address in `tests/lab/target` and the AD half of `scan-lab.sh` will run against it unchanged.
 - **NetBIOS name service (137/udp) is not published by the lab**, because macOS runs `netbiosd` on that port and the bind fails outright. `enum4linux-ng` loses its "NetBIOS Names and Workgroup" section as a result; its SMB-session and RPC sections still answer, and those are what the assertions use.
 - **`masscan` is excluded from the scan lab** because it needs raw sockets, and a `sudo` prompt in the middle of an otherwise unattended run is worse than the coverage is worth.
+- **`ligolo-ng` and `exploitdb` are built and read out of a tracked branch**, so neither has a version the manifests can hold. The ligolo build is also guarded on `dist/ligolo-ng-proxy-linux_<arch>` existing, so a `git pull` that brings in new commits does **not** rebuild — delete `dist/` (or `make clean`) when you want the pulled code. exploitdb needs no build step, so its `git pull` is the update.
+- **The exploitdb checkout is the largest thing module 80 clones** — the whole Exploit-DB corpus, which is exactly what makes `searchsploit` answer from a network with no egress. The first clone dominates module 80's runtime, and there is no smaller mirror worth having (the `offensive-security/exploitdb` GitHub mirror people still link to is archived; GitLab is where it is actually published).
 - Whether to clone the large legacy `/mnt/hacking/tools/` kit or leave it on the mount is still undecided.
 
 ## License

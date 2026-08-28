@@ -219,6 +219,29 @@ if want 80 '[ -d "$HOME/tools/binaries" ]'; then
       *) [ -e "$HOME/$dest" ] && pass "gh_release: $dest" || fail "gh_release: ~/$dest missing" ;;
     esac
   done < <(rl tools.d/releases.gh)
+
+  # --- the two tools module 80 builds/links out of a checkout ---------------
+  # ligolo-proxy needs BOTH names: the shim for interactive use and the
+  # /usr/local/bin one because the proxy only ever runs under sudo, whose
+  # secure_path does not include ~/.local/bin.
+  lig="$HOME/tools/repos/ligolo-ng/dist/ligolo-ng-proxy-linux_$(dpkg --print-architecture 2>/dev/null || echo amd64)"
+  [ -x "$lig" ] && pass "ligolo-ng built: $(basename "$lig")" \
+    || fail "no ligolo proxy at $lig — 'make all' did not run or failed"
+  have ligolo-proxy && pass "ligolo-proxy on PATH" || fail "ligolo-proxy not on PATH (shim missing)"
+  [ -x /usr/local/bin/ligolo-proxy ] && pass "ligolo-proxy reachable under sudo" \
+    || fail "/usr/local/bin/ligolo-proxy missing — 'sudo ligolo-proxy' will not resolve"
+
+  have searchsploit && pass "searchsploit on PATH" || fail "searchsploit not on PATH (module 80)"
+  if [ -f "$HOME/tools/repos/exploitdb/files_exploits.csv" ]; then
+    pass "exploitdb corpus present"
+  else
+    fail "no files_exploits.csv in ~/tools/repos/exploitdb — searchsploit has nothing to search"
+  fi
+  # Without an rc naming the checkout, searchsploit still works but nags to
+  # stderr on every search, which is what module 80 writes the rc to avoid.
+  grep -q "$HOME/tools/repos/exploitdb" "$HOME/.searchsploit_rc" 2>/dev/null \
+    && pass "\$HOME/.searchsploit_rc points at the checkout" \
+    || warn "\$HOME/.searchsploit_rc missing or points elsewhere — expect an '[i] Found (#2)' nag per search"
 fi
 
 # ---------------------------------------------------------------------------
