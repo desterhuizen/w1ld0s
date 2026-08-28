@@ -206,7 +206,25 @@ if want 30 'have ffuf'; then
 fi
 if want 40 'have aws'; then section "Cloud tools (40)"; check_pipx cloud.pipx; smoke_pipx cloud.pipx "$PIPX_APPS"; fi
 if want 50 'have r2'; then section "RE and binary tools (50)"; check_pipx re.pipx; smoke_pipx re.pipx "$PIPX_APPS"; fi
-if want 60 'have garble'; then section "Payload dev (60)"; check_go payload.go; fi
+if want 60 'have garble'; then
+  section "Payload dev (60)"
+  check_go payload.go
+
+  # Metasploit is the one apt source with no pin to drift-check, so the useful
+  # assertions are that the repo is wired the way module 60 wrote it and that
+  # msfconsole answers. A missing keyring with the tool present means the repo
+  # was added some other way and updates will not be verified.
+  have msfconsole && pass "msfconsole present" || fail "msfconsole missing (module 60)"
+  [ -s /usr/share/keyrings/metasploit-framework.gpg ] \
+    && pass "metasploit keyring installed" \
+    || fail "no /usr/share/keyrings/metasploit-framework.gpg — the apt repo is unsigned or absent"
+  if grep -q 'signed-by=/usr/share/keyrings/metasploit-framework.gpg' \
+       /etc/apt/sources.list.d/metasploit-framework.list 2>/dev/null; then
+    pass "metasploit apt source is signed-by the keyring"
+  else
+    fail "metasploit-framework.list missing or not signed-by — module 60 writes both"
+  fi
+fi
 
 if want 80 '[ -d "$HOME/tools/binaries" ]'; then
   section "Release binaries (80)"
