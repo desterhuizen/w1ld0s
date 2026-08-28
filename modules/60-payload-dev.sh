@@ -90,7 +90,12 @@ else
     _APT_UPDATED=0   # force the refresh that apt_install would otherwise skip
     log "wrote $MSF_LIST"
   fi
-  apt_install metasploit-framework || warn "metasploit-framework install failed"
+  # Presence-checked, unlike a normal apt_install. lucid is a rolling nightly and
+  # apt_refresh runs at least once per bootstrap, so a bare `apt-get install -y`
+  # would UPGRADE msf on any later run — a ~250MB download that swaps the
+  # framework out mid-engagement. First install wins; the box keeps that build
+  # until someone upgrades it deliberately.
+  have msfconsole || apt_install metasploit-framework || warn "metasploit-framework install failed"
   # msfconsole runs without a database; only db_nmap, workspaces and the hosts/
   # services tables need one, and `msfdb init` wants postgresql, which nothing
   # here installs. Left to the operator on purpose — it is per-engagement state.
