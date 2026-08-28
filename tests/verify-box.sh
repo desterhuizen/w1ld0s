@@ -263,6 +263,22 @@ if want 80 '[ -d "$HOME/tools/binaries" ]'; then
 fi
 
 # ---------------------------------------------------------------------------
+if want 85 '[ -d /var/www/html/tools ]'; then
+  section "Webroot tooling (85)"
+
+  # webroot.copy rows are globs and their sources are best-effort, so the
+  # assertion is on the staged basenames, not on the manifest paths.
+  for f in linpeas.sh winPEASx64.exe pspy64 mimikatz.exe Rubeus.exe PowerView.ps1; do
+    [ -f "/var/www/html/tools/$f" ] && pass "webroot: $f" || fail "webroot: $f missing (module 85)"
+  done
+
+  # A file staged 0600 serves as a 404 with nothing in the error log to say why.
+  unreadable="$(find /var/www/html/tools -maxdepth 1 -type f ! -perm -o=r 2>/dev/null | wc -l | tr -d ' ')"
+  [ "$unreadable" = "0" ] && pass "every staged file is world-readable" \
+    || fail "$unreadable staged file(s) not readable by www-data — they will 404"
+fi
+
+# ---------------------------------------------------------------------------
 if want 00 'grep -q ">>> w1ld0s >>>" "$HOME/.zshrc"'; then
   section "Shell"
 

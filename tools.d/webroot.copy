@@ -1,0 +1,59 @@
+# webroot.copy — files ALREADY on this box that get staged into the nginx
+# webroot for target-side download. Consumed by modules/85-webtools.sh.
+#
+# Format: one glob per line, relative to $HOME. Each match is copied to
+# /var/www/html/tools/<basename>. A row that matches nothing is a warning: the
+# module that installs it (60 or 80) did not run, or its fetch failed.
+#
+# Copied rather than re-downloaded on purpose. Every one of these is already
+# pinned and fetched by another module, and downloading a second copy straight
+# into the webroot means the box carries two versions of mimikatz that nothing
+# keeps in step. The exception is PEASS-ng, whose release binaries nothing else
+# installs — those rows live in webroot.gh.
+
+# --- linux privesc (module 80: releases.gh) ---
+tools/binaries/pspy/pspy32
+tools/binaries/pspy/pspy64
+
+# --- windows local privesc (module 80: releases.gh) ---
+tools/binaries/printspoofer/PrintSpoofer32.exe
+tools/binaries/printspoofer/PrintSpoofer64.exe
+tools/binaries/godpotato/GodPotato-NET4.exe
+
+# --- credential access (module 60) ---
+tools/binaries/mimikatz/x64/mimikatz.exe
+tools/binaries/runascs/RunasCs.exe
+
+# --- sysinternals (module 80) ---
+# The whole suite is on the box; these two are the ones that get pulled through
+# a shell often enough to be worth serving.
+tools/binaries/SysinternalsSuite/accesschk64.exe
+tools/binaries/SysinternalsSuite/PsExec64.exe
+
+# --- prebuilt .NET tooling (module 60: SharpCollection clone) ---
+# 4.7 Any-CPU is the build that runs on the widest set of targets.
+tools/repos/SharpCollection/NetFramework_4.7_Any/Rubeus.exe
+tools/repos/SharpCollection/NetFramework_4.7_Any/Seatbelt.exe
+tools/repos/SharpCollection/NetFramework_4.7_Any/SharpUp.exe
+tools/repos/SharpCollection/NetFramework_4.7_Any/SharpDPAPI.exe
+tools/repos/SharpCollection/NetFramework_4.7_Any/SharpHound.exe
+tools/repos/SharpCollection/NetFramework_4.7_Any/SharpChrome.exe
+tools/repos/SharpCollection/NetFramework_4.7_Any/SharpWMI.exe
+tools/repos/SharpCollection/NetFramework_4.7_Any/SweetPotato.exe
+tools/repos/SharpCollection/NetFramework_4.7_Any/Certify.exe
+
+# --- powershell (module 80: repos.git clones) ---
+tools/repos/PowerSploit/Recon/PowerView.ps1
+tools/repos/PowerSploit/Privesc/PowerUp.ps1
+tools/repos/PowerSploit/Exfiltration/Invoke-Mimikatz.ps1
+tools/repos/PowerUpSQL/PowerUpSQL.ps1
+# Invoke-Kerberoast.ps1 is deliberately absent: its home was EmpireProject/
+# Empire, which is archived, and Rubeus.exe above does the same job on a target
+# that can run a binary.
+
+# --- pivoting: ligolo agents, built by module 80 (`make all`) ---
+# The proxy stays on the workstation; these are the halves that go to a target.
+tools/repos/ligolo-ng/dist/ligolo-ng-agent-linux_amd64
+tools/repos/ligolo-ng/dist/ligolo-ng-agent-linux_arm64
+tools/repos/ligolo-ng/dist/ligolo-ng-agent-windows_amd64.exe
+tools/repos/ligolo-ng/dist/ligolo-ng-agent-windows_arm64.exe
