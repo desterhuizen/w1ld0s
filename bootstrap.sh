@@ -27,6 +27,7 @@ ALL_MODULES=(
   60-payload-dev
   70-wireless
   80-repos-binaries
+  85-webtools
   90-tools
   95-private
   99-secrets
@@ -83,4 +84,5 @@ done
 printf '\n'
 ok "bootstrap complete."
 log "Open a new shell (or 'hash -r'), verify tools, then snapshot the VM as 'clean-base'."
-log "First build is unpinned; once green, freeze versions into tools.d/*.list (see README)."
+log "First build is unpinned; once green, freeze versions back into tools.d/ with"
+log "  ./tests/freeze-pins.sh --diff   (see docs/README.md 'Updating a box')."

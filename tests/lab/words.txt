@@ -1,0 +1,4 @@
+login.php
+setup.php
+w1ld0s-no-such-path-a
+w1ld0s-no-such-path-b

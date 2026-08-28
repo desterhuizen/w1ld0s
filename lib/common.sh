@@ -177,7 +177,11 @@ pipx_tool() {  # pipx_tool <name> [pip-spec] [python-x.y]
     extra=(--python "python$pyver")
   fi
   if pipx list 2>/dev/null | grep -qiE "package $name "; then
-    log "pipx: $name present (upgrade later with: pipx upgrade $name)"
+    # NOT "pipx upgrade $name": under a ==-pinned manifest that goes to latest
+    # and silently breaks the pin this list exists to hold. The presence check
+    # above is by bare name, so a bumped pin is a no-op here — it lands on the
+    # next VM. tests/verify-box.sh reports the gap between the two.
+    log "pipx: $name present (bump the pin in tools.d/*.pipx; it applies on a rebuild)"
   else
     log "pipx: install $spec${pyver:+ (on python$pyver)}"
     pipx install "${extra[@]}" "$spec" || warn "pipx: failed to install $spec"
@@ -237,6 +241,26 @@ go_install_list() {  # each line: full go module path (with @version)
 # @ARCH@ / @ARCH_ALT@ in the glob expand to this host's arch (x86_64/aarch64 and
 # amd64/arm64). Use them for tools that RUN here; leave target-payload binaries
 # (pspy, PrintSpoofer, …) hardcoded — their arch is the victim's, not ours.
+#
+# One API call per repo@tag per run. webroot.gh alone is nine rows on a single
+# PEASS-ng tag, and GitHub allows 60 unauthenticated calls per hour per IP — few
+# enough that two bootstraps from one NAT'd address start getting 403s, at which
+# point each row degrades to a "no asset matching" warn and verify-box fails on
+# the files that never arrived. Deliberately per-run and not persistent: a cached
+# `latest` must not outlive the bootstrap that fetched it. The mktemp -d is left
+# for the OS to reap; bootstrap.sh's EXIT trap belongs to the sudo keepalive.
+_GH_CACHE_DIR=""
+_gh_release_json() {  # _gh_release_json <owner/repo> <tag|""> ; listing on stdout
+  local repo="$1" tag="$2" api f key="${2:-latest}"
+  [ -n "$_GH_CACHE_DIR" ] || _GH_CACHE_DIR="$(mktemp -d)"
+  f="$_GH_CACHE_DIR/${repo//\//_}__${key//\//_}"
+  if [ ! -s "$f" ]; then
+    api="https://api.github.com/repos/$repo/releases/latest"
+    [ -z "$tag" ] || api="https://api.github.com/repos/$repo/releases/tags/$tag"
+    curl -fsSL "$api" > "$f" || { rm -f "$f"; return 1; }
+  fi
+  cat "$f"
+}
 gh_release() {
   local spec="$1" glob="$2" dest="$3"
   local repo="${spec%@*}" tag=""
@@ -245,10 +269,8 @@ gh_release() {
   glob="${glob//@ARCH_ALT@/$W1LD0S_ARCH_ALT}"
   [ -e "$dest" ] && { log "have $(basename "$dest")"; return 0; }
   mkdir -p "$(dirname "$dest")"
-  local api="https://api.github.com/repos/$repo/releases/latest"
-  [ -z "$tag" ] || api="https://api.github.com/repos/$repo/releases/tags/$tag"
   local url
-  url=$(curl -fsSL "$api" \
+  url=$(_gh_release_json "$repo" "$tag" \
         | grep -oE '"browser_download_url": *"[^"]+"' | cut -d'"' -f4 \
         | grep -E "$glob" | head -n1)
   [ -n "$url" ] || { warn "gh_release: no asset matching '$glob' in $repo${tag:+ @ $tag}"; return 1; }

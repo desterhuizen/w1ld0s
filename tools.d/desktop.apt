@@ -16,9 +16,10 @@ dunst              # notifications
 libnotify-bin
 
 # --- session / login ---
-# Installed but NOT activated: modules/05 only makes lightdm the display manager
-# when W1LD0S_DM=lightdm. Having the packages here is what keeps that opt-in a
-# one-liner. On a GNOME box gdm3 stays in charge and module 06 brands it instead.
+# lightdm is the display manager: modules/05 switches to it unconditionally and
+# makes i3 the default session, because GNOME on 26.04 is Wayland-only and
+# Wayland is what broke Brave and Burp. gdm3 is left installed but inactive, and
+# module 06 brands whichever of the two is in charge.
 lightdm
 lightdm-gtk-greeter
 xorg

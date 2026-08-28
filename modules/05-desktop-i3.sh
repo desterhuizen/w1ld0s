@@ -28,6 +28,11 @@ fi
 # --- import your i3 config, i3blocks, fonts, terminator (verbatim) ----------
 install_asset i3/config          "$HOME/.config/i3/config"
 install_asset i3/i3blocks.conf   "$HOME/.config/i3/i3blocks.conf"
+# setup_workspace (w1ld0s-tools) hardcodes this path in its append_layout call,
+# so the name and the location are load-bearing rather than a convention. The
+# asset shipped here but was never installed, so the layout silently never
+# restored and setup_workspace had nothing to append.
+install_asset i3/i3-workspace-1.json "$HOME/.config/i3/i3-workspace-1.json"
 [ -d "$W1LD0S_ROOT/assets/i3/scripts" ] && { mkdir -p "$HOME/.config/i3/scripts"; cp -a "$W1LD0S_ROOT/assets/i3/scripts/." "$HOME/.config/i3/scripts/"; }
 install_asset terminator/config  "$HOME/.config/terminator/config"
 mkdir -p "$HOME/.fonts" && cp -a "$W1LD0S_ROOT/assets/fonts/." "$HOME/.fonts/" && fc-cache -f "$HOME/.fonts" >/dev/null 2>&1
@@ -103,46 +108,76 @@ fi
 # --- i3blocks-contrib (your i3blocks.conf references these scripts) ---------
 [ -d "$HOME/.config/i3blocks" ] || git clone --quiet https://github.com/vivien/i3blocks-contrib "$HOME/.config/i3blocks" || warn "i3blocks-contrib clone failed"
 
-# --- VMware RDP keymap fix ---------------------------------------------------
-# Only applied if not already present in the i3 config.
-if [ -f "$HOME/.config/i3/config" ] && ! grep -q "keycode 94 = grave" "$HOME/.config/i3/config"; then
-  log "Appending VMware RDP xmodmap keymap fixes to i3 config…"
-  cat >> "$HOME/.config/i3/config" <<'EOF'
-
-# --- w1ld0s: VMware RDP keymap fixes ---
-exec_always --no-startup-id xmodmap -e "keycode 94 = grave asciitilde"
-exec_always --no-startup-id xmodmap -e "keycode 51 = backslash bar backslash bar"
-exec_always --no-startup-id xmodmap -e "keycode 49 = numbersign asciitilde"
-exec_always --no-startup-id xmodmap -e "keycode 11 = 2 at 2 at"
-exec_always --no-startup-id xmodmap -e "keycode 48 = apostrophe quotedbl apostrophe quotedbl"
-exec_always --no-startup-id xmodmap -e "keycode 21 = section plusminus"
-EOF
-fi
-
-# --- display manager (opt-in) ------------------------------------------------
-# i3 is a SESSION choice, not a DM choice: gdm3 lists /usr/share/xsessions/i3
-# alongside the GNOME session, so the box is fully usable on i3 without touching
-# the display manager at all. We used to switch to lightdm unconditionally, which
-# on a GNOME box is a downgrade — Ubuntu 26.04 ships no Xorg GNOME session, so
-# taking gdm3 out takes GNOME-on-Wayland with it. Opt in instead:
+# --- display manager and default session -------------------------------------
+# Two separate settings, and the earlier version of this block only did the first
+# one. Switching the display manager does NOT get the box off Wayland: the
+# session type is decided by which .desktop the greeter launches, not by who
+# launches it. Brave and Burp misbehave under Wayland, and on 26.04 there is no
+# way to run GNOME on X11 — GNOME Shell 50 dropped X11, ubuntu-session ships only
+# /usr/share/wayland-sessions/ubuntu.desktop, and neither gnome-session-xsession
+# nor ubuntu-desktop-xorg exists in the archive. So the X11 desktop here is i3,
+# and it has to be made the default session explicitly. Both halves are below.
 #
-#   W1LD0S_DM=lightdm ./bootstrap.sh 05
-#
-# Ubuntu Desktop owns /etc/systemd/system/display-manager.service, so a bare
-# `systemctl enable lightdm` fails ("file already exists") and leaves gdm3 in
-# charge anyway. Switching DMs is a debconf question, not a unit toggle.
+# gdm3 is left INSTALLED, only inactive: purging it takes ubuntu-desktop with it.
+# To go back: sudo dpkg-reconfigure gdm3 && ./bootstrap.sh 06
 DM_FILE=/etc/X11/default-display-manager
-if [ "${W1LD0S_DM:-}" = "lightdm" ]; then
-  if [ "$(cat "$DM_FILE" 2>/dev/null)" != "/usr/sbin/lightdm" ] && have lightdm; then
-    log "W1LD0S_DM=lightdm — making lightdm the display manager (currently: $(basename "$(cat "$DM_FILE" 2>/dev/null || echo none)"))…"
-    echo "lightdm shared/default-x-display-manager select lightdm" | sudo debconf-set-selections 2>/dev/null
+DM_UNIT=/etc/systemd/system/display-manager.service
+# -x on the absolute path, not `have lightdm`: this is the path written into
+# DM_FILE, and it does not depend on /usr/sbin being on a non-root PATH.
+if [ ! -x /usr/sbin/lightdm ]; then
+  warn "lightdm not installed — display manager left alone. Re-run after fixing desktop.apt."
+else
+  if [ "$(cat "$DM_FILE" 2>/dev/null)" != "/usr/sbin/lightdm" ]; then
+    log "Making lightdm the display manager (currently: $(basename "$(cat "$DM_FILE" 2>/dev/null || echo none)"))…"
+    # Preseed first so a later dpkg-reconfigure of any DM agrees with us. This
+    # used to carry 2>/dev/null, which hid whatever went wrong here.
+    echo "lightdm shared/default-x-display-manager select lightdm" | sudo debconf-set-selections \
+      || warn "debconf-set-selections failed — a later dpkg-reconfigure may undo the switch"
     sudo DEBIAN_FRONTEND=noninteractive dpkg-reconfigure lightdm >/dev/null 2>&1 \
-      || warn "dpkg-reconfigure lightdm failed — switch by hand: sudo dpkg-reconfigure lightdm"
+      || warn "dpkg-reconfigure lightdm failed"
+  fi
+  # Assert, do not trust. On a real build the reconfigure above left DM_FILE
+  # untouched under DEBIAN_FRONTEND=noninteractive, module 06 read gdm3 from it
+  # two minutes later and branded the wrong greeter, and the only sign was one
+  # warn in the scroll. Write the two things that actually decide what boots.
+  if [ "$(cat "$DM_FILE" 2>/dev/null)" != "/usr/sbin/lightdm" ]; then
+    warn "$DM_FILE still reads '$(cat "$DM_FILE" 2>/dev/null || echo unset)' — writing it directly"
+    echo /usr/sbin/lightdm | sudo tee "$DM_FILE" >/dev/null
+  fi
+  # DM_FILE is debconf's record; this symlink is what systemd boots, and they can
+  # disagree. `systemctl enable lightdm` refuses to replace an existing
+  # display-manager.service alias ("file already exists") — -f is what takes it.
+  if [ "$(basename "$(readlink -f "$DM_UNIT" 2>/dev/null || echo none)")" != "lightdm.service" ]; then
+    sudo systemctl enable -f lightdm.service >/dev/null 2>&1
+    [ "$(basename "$(readlink -f "$DM_UNIT" 2>/dev/null || echo none)")" = "lightdm.service" ] \
+      || warn "$DM_UNIT still points at $(basename "$(readlink -f "$DM_UNIT" 2>/dev/null || echo nothing)") — gdm3 may still start"
+  fi
+  # Default session: i3, so the first login after provisioning lands on X11
+  # instead of the Ubuntu GNOME session, which is Wayland. It sets the default,
+  # not a restriction — GNOME stays in the greeter's session picker.
+  #
+  # LightDM reads /usr/share/lightdm/lightdm.conf.d/*.conf, then
+  # /etc/lightdm/lightdm.conf.d/*.conf, then /etc/lightdm/lightdm.conf, last
+  # value winning. Debian's 01_ and Ubuntu's 02_ drop-ins live in the FIRST of
+  # those, a whole directory below this one, so the 90- prefix is not what beats
+  # them — it only orders us against other drop-ins in the same directory. What
+  # a drop-in cannot outrank is lightdm.conf itself, so say so rather than write
+  # a file that looks right and loses.
+  LDM_SESSION_CONF=/etc/lightdm/lightdm.conf.d/90-w1ld0s-session.conf
+  if ! grep -qx 'user-session=i3' "$LDM_SESSION_CONF" 2>/dev/null; then
+    sudo install -d -m755 /etc/lightdm/lightdm.conf.d
+    printf '[Seat:*]\nuser-session=i3\n' | sudo tee "$LDM_SESSION_CONF" >/dev/null \
+      && ok "default session set to i3 ($LDM_SESSION_CONF)"
+  fi
+  LDM_OVERRIDE="$(grep -E '^[[:space:]]*user-session[[:space:]]*=' /etc/lightdm/lightdm.conf 2>/dev/null \
+                  | tail -n1 | cut -d= -f2- | tr -d '[:space:]')"
+  if [ -n "$LDM_OVERRIDE" ] && [ "$LDM_OVERRIDE" != i3 ]; then
+    warn "/etc/lightdm/lightdm.conf sets user-session=$LDM_OVERRIDE — it is read after $LDM_SESSION_CONF and wins; remove that line or the greeter still defaults to $LDM_OVERRIDE"
   fi
 fi
 ACTIVE_DM="$(basename "$(cat "$DM_FILE" 2>/dev/null || echo unknown)")"
+[ "$ACTIVE_DM" = "lightdm" ] || warn "display manager is '$ACTIVE_DM', expected lightdm"
 sudo systemctl enable --now vmtoolsd >/dev/null 2>&1 || true
 
 # Module 06 brands whichever DM is in charge here, so say which one that is.
-ok "i3 desktop ready. Pick the i3 session at the $ACTIVE_DM login screen (log out first)."
-[ "${W1LD0S_DM:-}" = "lightdm" ] || log "display manager left as '$ACTIVE_DM' — set W1LD0S_DM=lightdm to switch."
+ok "i3 desktop ready. i3 is the default session at the $ACTIVE_DM login screen (log out first)."
