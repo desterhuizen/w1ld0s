@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 60-payload-dev.sh — Payload dev / AV evasion: mingw cross-compile, wine, garble,
-# SharpCollection, ysoserial, DotNetToJScript, RunasCs+mimikatz releases, veil, beef.
+# SharpCollection, ysoserial, DotNetToJScript, RunasCs+mimikatz releases, veil, beef,
+# and Metasploit Framework from Rapid7's nightly apt repo.
 [ -n "${W1LD0S_ROOT:-}" ] || { W1LD0S_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; source "$W1LD0S_ROOT/lib/common.sh"; }
 
 # --- cross-compile + wine ---------------------------------------------------
@@ -45,6 +46,68 @@ fi
 if [ ! -d "$BINARIES_DIR/mimikatz/x64" ]; then
   gh_release gentilkiwi/mimikatz@2.2.0-20220919 'mimikatz_trunk\.zip$' "$BINARIES_DIR/mimikatz/mimikatz_trunk.zip" \
     && unzip -q -o "$BINARIES_DIR/mimikatz/mimikatz_trunk.zip" -d "$BINARIES_DIR/mimikatz" && ok "mimikatz installed"
+fi
+
+# --- Metasploit Framework (nightly apt repo, added by hand) -----------------
+# Rapid7 documents a one-liner that curls msfinstall out of raw.githubusercontent
+# and runs it as root. On Debian/Ubuntu that script does exactly three things:
+# dearmor its embedded signing key, write the sources.list line below, and
+# apt-get install metasploit-framework. So we do those ourselves — same packages
+# off the same repo, no unreviewed root script in the middle, and a re-run is an
+# apt no-op instead of a re-download of the installer.
+#
+# The suite really is "lucid": Rapid7 has published one release pocket under
+# that codename since 2015 and it is not tied to an Ubuntu version. msfinstall
+# also writes /etc/apt/preferences.d/pin-metasploit.pref; that pin exists to win
+# against a distro-packaged metasploit, and Ubuntu has never shipped one, so it
+# is left out rather than carried as cargo.
+MSF_KEYRING=/usr/share/keyrings/metasploit-framework.gpg
+MSF_LIST=/etc/apt/sources.list.d/metasploit-framework.list
+MSF_URI=https://downloads.metasploit.com/data/releases/metasploit-framework/apt
+
+if [ ! -s "$MSF_KEYRING" ]; then
+  log "Adding the Metasploit nightly apt repo…"
+  # mktemp rather than a fixed /tmp path — module 35's SITE_TMP is the same
+  # pattern. Test the dearmored file instead of the pipeline: pipefail is set by
+  # bootstrap.sh, not lib/common.sh, so running this module on its own would see
+  # gpg's status and nothing else. --show-keys is what rejects a captive
+  # portal's HTML; the re-fetch guard above is only [ ! -s ], so a non-empty but
+  # bogus keyring would stick and break apt-get update's signature check for good.
+  MSF_TMP="$(mktemp)"
+  curl -fsSL https://apt.metasploit.com/metasploit-framework.gpg.key \
+    | gpg --dearmor > "$MSF_TMP" 2>/dev/null
+  if [ -s "$MSF_TMP" ] && gpg --show-keys "$MSF_TMP" >/dev/null 2>&1; then
+    sudo install -o root -g root -m 644 "$MSF_TMP" "$MSF_KEYRING" \
+      || warn "metasploit: could not install the keyring"
+  else
+    warn "metasploit: could not fetch or dearmor the signing key"
+  fi
+  rm -f "$MSF_TMP"
+fi
+
+if [ ! -s "$MSF_KEYRING" ]; then
+  warn "no $MSF_KEYRING — skipping metasploit-framework"
+else
+  # arch= is not cosmetic here. The repo advertises i386 alongside amd64/arm64,
+  # and module 60 is the one module that enables the i386 architecture — an
+  # i386 index plus i386 enabled is the state lib/common.sh's --no-remove guard
+  # exists to survive. Pin the index to this box's architecture instead.
+  MSF_LINE="deb [arch=$(dpkg --print-architecture) signed-by=$MSF_KEYRING] $MSF_URI lucid main"
+  if [ "$(cat "$MSF_LIST" 2>/dev/null)" != "$MSF_LINE" ]; then
+    printf '%s\n' "$MSF_LINE" | sudo tee "$MSF_LIST" >/dev/null
+    _APT_UPDATED=0   # force the refresh that apt_install would otherwise skip
+    log "wrote $MSF_LIST"
+  fi
+  # Presence-checked, unlike a normal apt_install. lucid is a rolling nightly and
+  # apt_refresh runs at least once per bootstrap, so a bare `apt-get install -y`
+  # would UPGRADE msf on any later run — a ~250MB download that swaps the
+  # framework out mid-engagement. First install wins; the box keeps that build
+  # until someone upgrades it deliberately.
+  have msfconsole || apt_install metasploit-framework || warn "metasploit-framework install failed"
+  # msfconsole runs without a database; only db_nmap, workspaces and the hosts/
+  # services tables need one, and `msfdb init` wants postgresql, which nothing
+  # here installs. Left to the operator on purpose — it is per-engagement state.
+  have msfconsole && ok "metasploit installed (no database: sudo apt-get install postgresql && msfdb init)"
 fi
 
 # --- veil: dropped ----------------------------------------------------------

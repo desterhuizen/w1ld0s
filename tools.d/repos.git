@@ -5,6 +5,7 @@
 
 # --- tunneling / c2 / shells ---
 https://github.com/NHAS/reverse_ssh.git
+https://github.com/nicocha30/ligolo-ng.git
 https://github.com/jpillora/chisel.git
 https://github.com/iagox86/dnscat2.git
 https://github.com/Mr-Un1k0d3r/SCShell.git
@@ -24,6 +25,14 @@ https://github.com/outflanknl/EvilClippy.git
 
 # --- privesc / enum ---
 https://github.com/peass-ng/PEASS-ng.git
+
+# --- exploit search ---
+# GitLab, not GitHub, and the only non-github.com URL in this file. By far the
+# largest clone in it, because it carries the whole Exploit-DB corpus — which is
+# the point: searchsploit answers offline, from a network with no egress.
+# (The archived github.com/offensive-security/exploitdb mirror is dead; this is
+# where Exploit-DB actually publishes.)
+https://gitlab.com/exploit-database/exploitdb.git
 
 # --- recon / infra ---
 https://github.com/rvrsh3ll/FindFrontableDomains.git
