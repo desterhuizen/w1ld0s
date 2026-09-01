@@ -7,8 +7,8 @@
 <p align="center"><em>Stability. Trust. Dominance.</em></p>
 
 A clean Ubuntu 26.04 LTS pentest workstation, provisioned by one idempotent bash
-script. No Kali coupling, no apt-versioned Python security tools, every Python CLI in
-its own venv.
+script. A much looser coupling, no apt-versioned Python security tools, every Python
+CLI in its own venv.
 
 ```bash
 sudo apt install -y git openssh-client ca-certificates curl
@@ -45,18 +45,16 @@ you. The OS changes every two years; those scripts change every week.
 **[Full documentation →](docs/README.md)** — core principles, the per-module table, the
 complete tool inventory, first-run procedure, pinning rules, and known gaps.
 
-## Why not Kali
+## Why not Kali/Parrot
 
-Kali makes version decisions for you and they collide. `netexec` hard-depends on legacy
+Kali makes version decisions for you and they can collide. Eg `netexec` hard-depends on legacy
 `bloodhound.py`, which conflicts with `bloodhound-ce`. The distro `ldap3` ships without
 a working LDAP sign/seal layer, which makes collection against a signing-enforced DC
 with no LDAPS certificate structurally impossible. One shared `site-packages` plus a
 distro choosing versions produces exactly that class of unexplainable breakage.
 
 So: apt for the OS and stable native tools only, one pipx venv per Python CLI, and a
-dedicated venv for anything needing patched dependencies. See
-[`docs/ad-collection-cheatsheet.md`](docs/ad-collection-cheatsheet.md) for the full
-post-mortem.
+dedicated venv for anything needing patched dependencies.
 
 ## License
 
